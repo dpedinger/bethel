@@ -1,0 +1,77 @@
+CREATE OR REPLACE PACKAGE program_outcome_matrix IS
+
+    PROCEDURE upsert_po (
+        p_pog_id           IN   NUMBER
+        , p_po_id          IN   NUMBER
+        , p_po_desc        IN   VARCHAR2
+        , p_po_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_po_desc   IN   VARCHAR2
+        , p_edit_po_seq    IN   VARCHAR2
+    );
+
+    PROCEDURE upsert_c (
+        p_cg_id           IN   NUMBER
+        , p_c_id          IN   NUMBER
+        , p_c_desc        IN   VARCHAR2
+        , p_c_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_c_desc   IN   VARCHAR2
+        , p_edit_c_seq    IN   VARCHAR2
+    );
+
+    PROCEDURE upsert_co (
+        p_course_id        IN   NUMBER
+        , p_co_id          IN   NUMBER
+        , p_co_desc        IN   VARCHAR2
+        , p_co_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_co_desc   IN   VARCHAR2
+        , p_edit_co_seq    IN   VARCHAR2
+    );
+
+    PROCEDURE upsert_assess (
+        p_course_id            IN   NUMBER
+        , p_assess_id          IN   NUMBER
+        , p_assess_name        IN   VARCHAR2
+        , p_assess_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_assess_name   IN   VARCHAR2
+        , p_edit_assess_seq    IN   VARCHAR2
+    );
+
+    PROCEDURE insert_alias (
+        p_pog_id        IN   NUMBER
+        , p_course_id   IN   NUMBER
+        , p_alias       IN   VARCHAR2
+    );
+
+    PROCEDURE delete_course (
+        p_course_id in number
+    );
+
+    PROCEDURE delete_pog (
+        p_pog_id IN NUMBER
+    );
+
+    PROCEDURE delete_po (
+        p_po_id IN NUMBER
+    );
+
+    PROCEDURE delete_co (
+        p_co_id IN NUMBER
+    );
+
+    PROCEDURE delete_cg (
+        p_cg_id IN NUMBER
+    );
+
+    PROCEDURE delete_c (
+        p_c_id IN NUMBER
+    );
+
+    PROCEDURE delete_assess (
+        p_assess_id IN NUMBER
+    );
+
+    PROCEDURE delete_alias (
+        p_alias_id IN NUMBER
+    );
+
+END program_outcome_matrix;
