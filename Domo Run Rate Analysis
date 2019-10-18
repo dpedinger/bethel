@@ -1,0 +1,296 @@
+CREATE OR REPLACE FORCE EDITIONABLE VIEW "BTHBANR"."DOMO_RUN_RATE_ANALYSIS" (
+    "FSYR"
+    , "FUND"
+    , "ORGN"
+    , "BUDGET"
+    , "BUDGET_YR_AGO_1"
+    , "BUDGET_YR_AGO_2"
+    , "BUDGET_YR_AGO_3"
+    , "MONTH"
+    , "ACTUAL"
+    , "YR_AGO_1"
+    , "YR_AGO_2"
+    , "YR_AGO_3"
+    , "DIVISION"
+) AS
+    SELECT
+        'FY' || fsyr fsyr
+        , fund
+        , orgn
+        , budget
+        , budget_yr_ago_1
+        , budget_yr_ago_2
+        , budget_yr_ago_3
+        , month
+        , actual
+        , yr_ago_1
+        , yr_ago_2
+        , yr_ago_3
+        , division
+    FROM
+        ( (
+            WITH prev AS (
+                SELECT
+                    f.fgbopal_fsyr_code
+                    , f.fgbopal_fund_code
+                    , f.fgbopal_orgn_code
+                    , f.fgbopal_coas_code
+                    , SUM(f.fgbopal_01_ytd_actv) fgbopal_01_ytd_actv
+                    , SUM(f.fgbopal_02_ytd_actv) fgbopal_02_ytd_actv
+                    , SUM(f.fgbopal_03_ytd_actv) fgbopal_03_ytd_actv
+                    , SUM(f.fgbopal_04_ytd_actv) fgbopal_04_ytd_actv
+                    , SUM(f.fgbopal_05_ytd_actv) fgbopal_05_ytd_actv
+                    , SUM(f.fgbopal_06_ytd_actv) fgbopal_06_ytd_actv
+                    , SUM(f.fgbopal_07_ytd_actv) fgbopal_07_ytd_actv
+                    , SUM(f.fgbopal_08_ytd_actv) fgbopal_08_ytd_actv
+                    , SUM(f.fgbopal_09_ytd_actv) fgbopal_09_ytd_actv
+                    , SUM(f.fgbopal_10_ytd_actv) fgbopal_10_ytd_actv
+                    , SUM(f.fgbopal_11_ytd_actv) fgbopal_11_ytd_actv
+                    , SUM(f.fgbopal_12_ytd_actv) fgbopal_12_ytd_actv
+                FROM
+                    fimsmgr.fgbopal f
+                WHERE
+                    f.fgbopal_acct_code IN (
+                        6001, 6011, 6012, 6015, 6021, 6022, 6023, 6024, 6025, 6026, 6027, 6028,
+                        6029, 6050, 6051, 6052, 6053, 6055, 6099, 6101, 6102, 6103, 6105, 6106,
+                        6108, 6120, 6121, 6122, 6150, 6201, 6300, 6301, 6310, 6311, 6312, 6330,
+                        6331, 6332, 6333, 6340, 6350, 6351, 6355, 6356, 6357, 6370, 6371, 6372,
+                        6373, 6401, 6402, 6403, 6404, 6499, 6999, 7001, 7005, 7006, 7010, 7015,
+                        7020, 7021, 7022, 7023, 7024, 7025, 7026, 7027, 7028, 7029, 7030, 7031,
+                        7032, 7050, 7060, 7061, 7101, 7102, 7103, 7104, 7105, 7106, 7107, 7108,
+                        7109, 7110, 7111, 7112, 7113, 7114, 7115, 7116, 7117, 7118, 7119, 7150,
+                        7201, 7202, 7203, 7204, 7205, 7206, 7207, 7208, 7209, 7210, 7211, 7212,
+                        7213, 7215, 7216, 7219, 7220, 7221, 7225, 7226, 7230, 7235, 7240, 7245,
+                        7250, 7260, 7270, 7271, 7272, 7273, 7274, 7275, 7301, 7302, 7303, 7305,
+                        7310, 7315, 7320, 7321, 7322, 7323, 7324, 7325, 7326, 7330, 7331, 7332,
+                        7333, 7334, 7340, 7341, 7345, 7350, 7351, 7401, 7402, 7403, 7404, 7407,
+                        7408, 7409, 7410, 7411, 7412, 7415, 7416, 7417, 7418, 7420, 7425, 7430,
+                        7450, 7451, 7452, 7453, 7454, 7455, 7456, 7457, 7460, 7464, 7465, 7466,
+                        7467, 7468, 7470, 7471, 7472, 7475, 7476, 7480, 7481, 7482, 7483, 7484,
+                        7485, 7486, 7487, 7490, 7491, 7501, 7505, 7510, 7511, 7515, 7525, 7530,
+                        7531, 7535, 7540, 7541, 7545, 7551, 7552, 7555, 7560, 7601, 7610, 7611,
+                        7615, 7616, 7620, 7630, 7650, 7651, 7652, 7653, 7660, 7661, 7662, 7663,
+                        7664, 7665, 7666, 7667, 7670, 7701, 7702, 7703, 7704, 7705, 7706, 7707,
+                        7708, 7709, 7710, 7711, 7712, 7713, 7714, 7715, 7716, 7731, 7732, 7733,
+                        7734, 7735, 7736, 7737, 7738, 7739, 7751, 7752, 7753, 7754, 7755, 7756,
+                        7771, 7772, 7791, 7801, 7802, 7803, 7804, 7805, 7806, 7810, 7811, 7812,
+                        7813, 7814, 7815, 7816, 7817, 7818, 7830, 7835, 7840, 7845, 7846, 7847,
+                        7848, 7850, 7860, 7865, 7866, 7867, 7870, 7871, 7872, 7891, 7901, 7902,
+                        7903, 7904, 7905, 7906, 7907, 7908, 7909, 7910, 7945, 7948, 7949, 7951,
+                        7952, 7953, 7954, 7955, 7956, 7957, 7958, 7959, 7960, 8110, 8111, 8112,
+                        8113, 8114, 8115, 8116, 8117, 8118, 8119, 8120, 8121, 8122, 8210, 8211,
+                        8212, 8213, 8214, 8215, 8216, 8217, 8221, 8222, 8310, 8320, 8330, 8410,
+                        8420, 8430, 8501, 8502
+                    )
+                GROUP BY
+                    f.fgbopal_fsyr_code
+                    , f.fgbopal_fund_code
+                    , f.fgbopal_orgn_code
+                    , f.fgbopal_coas_code
+            )
+            SELECT
+                b.fgbopal_fsyr_code       fsyr
+                , b.fgbopal_fund_code       fund
+                , b.fgbopal_orgn_code || ' - ' || orgn.ftvorgn_title orgn
+                , obd.division
+                , SUM(b.fgbopal_12_acctd_bud) budget
+                , m_1.fgbopal_12_ytd_actv   budget_yr_ago_1
+                , m_2.fgbopal_12_ytd_actv   budget_yr_ago_2
+                , m_3.fgbopal_12_ytd_actv   budget_yr_ago_3
+                , SUM(b.fgbopal_01_ytd_actv) jun0
+                , SUM(b.fgbopal_02_ytd_actv) jul0
+                , SUM(b.fgbopal_03_ytd_actv) aug0
+                , SUM(b.fgbopal_04_ytd_actv) sep0
+                , SUM(b.fgbopal_05_ytd_actv) oct0
+                , SUM(b.fgbopal_06_ytd_actv) nov0
+                , SUM(b.fgbopal_07_ytd_actv) dec0
+                , SUM(b.fgbopal_08_ytd_actv) jan0
+                , SUM(b.fgbopal_09_ytd_actv) feb0
+                , SUM(b.fgbopal_10_ytd_actv) mar0
+                , SUM(b.fgbopal_11_ytd_actv) apr0
+                , SUM(b.fgbopal_12_ytd_actv) may0
+                , m_1.fgbopal_01_ytd_actv   jun1
+                , m_1.fgbopal_02_ytd_actv   jul1
+                , m_1.fgbopal_03_ytd_actv   aug1
+                , m_1.fgbopal_04_ytd_actv   sep1
+                , m_1.fgbopal_05_ytd_actv   oct1
+                , m_1.fgbopal_06_ytd_actv   nov1
+                , m_1.fgbopal_07_ytd_actv   dec1
+                , m_1.fgbopal_08_ytd_actv   jan1
+                , m_1.fgbopal_09_ytd_actv   feb1
+                , m_1.fgbopal_10_ytd_actv   mar1
+                , m_1.fgbopal_11_ytd_actv   apr1
+                , m_1.fgbopal_12_ytd_actv   may1
+                , m_2.fgbopal_01_ytd_actv   jun2
+                , m_2.fgbopal_02_ytd_actv   jul2
+                , m_2.fgbopal_03_ytd_actv   aug2
+                , m_2.fgbopal_04_ytd_actv   sep2
+                , m_2.fgbopal_05_ytd_actv   oct2
+                , m_2.fgbopal_06_ytd_actv   nov2
+                , m_2.fgbopal_07_ytd_actv   dec2
+                , m_2.fgbopal_08_ytd_actv   jan2
+                , m_2.fgbopal_09_ytd_actv   feb2
+                , m_2.fgbopal_10_ytd_actv   mar2
+                , m_2.fgbopal_11_ytd_actv   apr2
+                , m_2.fgbopal_12_ytd_actv   may2
+                , m_3.fgbopal_01_ytd_actv   jun3
+                , m_3.fgbopal_02_ytd_actv   jul3
+                , m_3.fgbopal_03_ytd_actv   aug3
+                , m_3.fgbopal_04_ytd_actv   sep3
+                , m_3.fgbopal_05_ytd_actv   oct3
+                , m_3.fgbopal_06_ytd_actv   nov3
+                , m_3.fgbopal_07_ytd_actv   dec3
+                , m_3.fgbopal_08_ytd_actv   jan3
+                , m_3.fgbopal_09_ytd_actv   feb3
+                , m_3.fgbopal_10_ytd_actv   mar3
+                , m_3.fgbopal_11_ytd_actv   apr3
+                , m_3.fgbopal_12_ytd_actv   may3
+            FROM
+                fimsmgr.fgbopal                     b
+                LEFT JOIN fimsmgr.ftvorgn           orgn
+                ON orgn.ftvorgn_orgn_code = b.fgbopal_orgn_code
+                   AND trunc(orgn.ftvorgn_nchg_date) = TO_DATE('31-DEC-99', 'DD-MON-YY')
+                   AND orgn.ftvorgn_coas_code = b.fgbopal_coas_code
+                   AND orgn.ftvorgn_status_ind = 'A'
+                JOIN prev                           m_1
+                ON m_1.fgbopal_coas_code = b.fgbopal_coas_code
+                   AND m_1.fgbopal_fund_code = b.fgbopal_fund_code
+                   AND m_1.fgbopal_orgn_code = b.fgbopal_orgn_code
+                   AND m_1.fgbopal_fsyr_code = b.fgbopal_fsyr_code - 1
+                LEFT JOIN prev                       m_2
+                ON m_2.fgbopal_coas_code = b.fgbopal_coas_code
+                   AND m_2.fgbopal_fund_code = b.fgbopal_fund_code
+                   AND m_2.fgbopal_orgn_code = b.fgbopal_orgn_code
+                   AND m_2.fgbopal_fsyr_code = b.fgbopal_fsyr_code - 2
+                LEFT JOIN prev                       m_3
+                ON m_3.fgbopal_coas_code = b.fgbopal_coas_code
+                   AND m_3.fgbopal_fund_code = b.fgbopal_fund_code
+                   AND m_3.fgbopal_orgn_code = b.fgbopal_orgn_code
+                   AND m_3.fgbopal_fsyr_code = b.fgbopal_fsyr_code - 3
+                LEFT JOIN bthbanr.orgn_by_division   obd
+                ON orgn = b.fgbopal_orgn_code
+            WHERE
+                b.fgbopal_fund_code = '110000'
+                AND b.fgbopal_orgn_code IN (
+                    '25050', '25105', '25107', '25110', '25111', '25112', '25113', '25115', '25120',
+                    '25125', '25130', '25131', '25135', '25140', '25145', '25146', '25150', '25155',
+                    '25160', '25161', '25162', '25165', '25166', '25170', '25205', '25210', '25215',
+                    '25219', '25220', '25221', '25222', '25223', '25225', '25226', '25230', '25235',
+                    '25240', '25241', '25245', '25249', '25250', '25251', '25252', '25305', '25310',
+                    '25315', '25320', '25325', '25330', '25331', '25335', '25340', '25345', '25350',
+                    '25355', '25358', '25359', '25360', '25361', '25365', '25370', '25372', '25374',
+                    '25375', '25376', '25380', '25381', '28130', '28140', '28150', '30015', '30016',
+                    '30017', '30018', '30019', '30050', '31105', '31107', '31110', '31115', '31120',
+                    '31125', '31130', '31135', '31140', '31142', '31145', '31150', '31155', '31160',
+                    '31165', '31170', '31175', '31180', '31185', '31190', '31195', '31200', '31205',
+                    '31210', '31215', '31220', '31230', '31240', '31250', '31305', '31310', '31315',
+                    '31320', '31325', '31330', '31335', '31340', '31345', '31350', '31355', '31360',
+                    '31365', '31370', '31375', '31380', '31385', '31390', '31395', '31400', '31405',
+                    '31505', '31510', '31515', '31520', '31525', '31530', '31535', '31540', '31545',
+                    '31550', '31555', '31560', '32015', '32050', '32105', '32110', '32115', '32120',
+                    '32125', '32130', '32135', '32140', '32145', '32150', '32160', '32170', '32180',
+                    '32205', '32210', '32215', '32220', '32221', '32225', '32230', '32235', '32240',
+                    '32250', '32305', '32310', '32315', '32320', '32325', '32385', '32545', '35130',
+                    '35140', '41130', '42135', '43132', '43133', '43134', '54151', '54152', '54153',
+                    '55305', '56210', '56275'
+                )
+                AND b.fgbopal_acct_code IN (
+                    6001, 6011, 6012, 6015, 6021, 6022, 6023, 6024, 6025, 6026, 6027, 6028,
+                    6029, 6050, 6051, 6052, 6053, 6055, 6099, 6101, 6102, 6103, 6105, 6106,
+                    6108, 6120, 6121, 6122, 6150, 6201, 6300, 6301, 6310, 6311, 6312, 6330,
+                    6331, 6332, 6333, 6340, 6350, 6351, 6355, 6356, 6357, 6370, 6371, 6372,
+                    6373, 6401, 6402, 6403, 6404, 6499, 6999, 7001, 7005, 7006, 7010, 7015,
+                    7020, 7021, 7022, 7023, 7024, 7025, 7026, 7027, 7028, 7029, 7030, 7031,
+                    7032, 7050, 7060, 7061, 7101, 7102, 7103, 7104, 7105, 7106, 7107, 7108,
+                    7109, 7110, 7111, 7112, 7113, 7114, 7115, 7116, 7117, 7118, 7119, 7150,
+                    7201, 7202, 7203, 7204, 7205, 7206, 7207, 7208, 7209, 7210, 7211, 7212,
+                    7213, 7215, 7216, 7219, 7220, 7221, 7225, 7226, 7230, 7235, 7240, 7245,
+                    7250, 7260, 7270, 7271, 7272, 7273, 7274, 7275, 7301, 7302, 7303, 7305,
+                    7310, 7315, 7320, 7321, 7322, 7323, 7324, 7325, 7326, 7330, 7331, 7332,
+                    7333, 7334, 7340, 7341, 7345, 7350, 7351, 7401, 7402, 7403, 7404, 7407,
+                    7408, 7409, 7410, 7411, 7412, 7415, 7416, 7417, 7418, 7420, 7425, 7430,
+                    7450, 7451, 7452, 7453, 7454, 7455, 7456, 7457, 7460, 7464, 7465, 7466,
+                    7467, 7468, 7470, 7471, 7472, 7475, 7476, 7480, 7481, 7482, 7483, 7484,
+                    7485, 7486, 7487, 7490, 7491, 7501, 7505, 7510, 7511, 7515, 7525, 7530,
+                    7531, 7535, 7540, 7541, 7545, 7551, 7552, 7555, 7560, 7601, 7610, 7611,
+                    7615, 7616, 7620, 7630, 7650, 7651, 7652, 7653, 7660, 7661, 7662, 7663,
+                    7664, 7665, 7666, 7667, 7670, 7701, 7702, 7703, 7704, 7705, 7706, 7707,
+                    7708, 7709, 7710, 7711, 7712, 7713, 7714, 7715, 7716, 7731, 7732, 7733,
+                    7734, 7735, 7736, 7737, 7738, 7739, 7751, 7752, 7753, 7754, 7755, 7756,
+                    7771, 7772, 7791, 7801, 7802, 7803, 7804, 7805, 7806, 7810, 7811, 7812,
+                    7813, 7814, 7815, 7816, 7817, 7818, 7830, 7835, 7840, 7845, 7846, 7847,
+                    7848, 7850, 7860, 7865, 7866, 7867, 7870, 7871, 7872, 7891, 7901, 7902,
+                    7903, 7904, 7905, 7906, 7907, 7908, 7909, 7910, 7945, 7948, 7949, 7951,
+                    7952, 7953, 7954, 7955, 7956, 7957, 7958, 7959, 7960, 8110, 8111, 8112,
+                    8113, 8114, 8115, 8116, 8117, 8118, 8119, 8120, 8121, 8122, 8210, 8211,
+                    8212, 8213, 8214, 8215, 8216, 8217, 8221, 8222, 8310, 8320, 8330, 8410,
+                    8420, 8430, 8501, 8502
+                )
+                AND b.fgbopal_fsyr_code IN (
+                    f_get_fiscal_year(1, SYSDATE)
+                    , f_get_fiscal_year(1, SYSDATE) - 1
+                    , f_get_fiscal_year(1, SYSDATE) - 2
+                    , f_get_fiscal_year(1, SYSDATE) - 3
+                )
+            GROUP BY
+                b.fgbopal_fsyr_code
+                , b.fgbopal_fund_code
+                , b.fgbopal_orgn_code || ' - ' || orgn.ftvorgn_title
+                , obd.division
+                , m_1.fgbopal_01_ytd_actv
+                , m_1.fgbopal_02_ytd_actv
+                , m_1.fgbopal_03_ytd_actv
+                , m_1.fgbopal_04_ytd_actv
+                , m_1.fgbopal_05_ytd_actv
+                , m_1.fgbopal_06_ytd_actv
+                , m_1.fgbopal_07_ytd_actv
+                , m_1.fgbopal_08_ytd_actv
+                , m_1.fgbopal_09_ytd_actv
+                , m_1.fgbopal_10_ytd_actv
+                , m_1.fgbopal_11_ytd_actv
+                , m_1.fgbopal_12_ytd_actv
+                , m_2.fgbopal_01_ytd_actv
+                , m_2.fgbopal_02_ytd_actv
+                , m_2.fgbopal_03_ytd_actv
+                , m_2.fgbopal_04_ytd_actv
+                , m_2.fgbopal_05_ytd_actv
+                , m_2.fgbopal_06_ytd_actv
+                , m_2.fgbopal_07_ytd_actv
+                , m_2.fgbopal_08_ytd_actv
+                , m_2.fgbopal_09_ytd_actv
+                , m_2.fgbopal_10_ytd_actv
+                , m_2.fgbopal_11_ytd_actv
+                , m_2.fgbopal_12_ytd_actv
+                , m_3.fgbopal_01_ytd_actv
+                , m_3.fgbopal_02_ytd_actv
+                , m_3.fgbopal_03_ytd_actv
+                , m_3.fgbopal_04_ytd_actv
+                , m_3.fgbopal_05_ytd_actv
+                , m_3.fgbopal_06_ytd_actv
+                , m_3.fgbopal_07_ytd_actv
+                , m_3.fgbopal_08_ytd_actv
+                , m_3.fgbopal_09_ytd_actv
+                , m_3.fgbopal_10_ytd_actv
+                , m_3.fgbopal_11_ytd_actv
+                , m_3.fgbopal_12_ytd_actv
+        ) UNPIVOT ( ( actual
+        , yr_ago_1
+        , yr_ago_2
+        , yr_ago_3 )
+            FOR month
+        IN (
+        ( jun0, jun1, jun2, jun3 ) AS 'June'
+        , ( jul0, jul1, jul2, jul3 ) AS 'July'
+        , ( aug0, aug1, aug2, aug3 ) AS 'August'
+        , ( sep0, sep1, sep2, sep3 ) AS 'September'
+        , ( oct0, oct1, oct2, oct3 ) AS 'October'
+        , ( nov0, nov1, nov2, nov3 ) AS 'November'
+        , ( dec0, dec1, dec2, dec3 ) AS 'December'
+        , ( jan0, jan1, jan2, jan3 ) AS 'January'
+        , ( feb0, feb1, feb2, feb3 ) AS 'February'
+        , ( mar0, mar1, mar2, mar3 ) AS 'March'
+        , ( apr0, apr1, apr2, apr3 ) AS 'April'
+        , ( may0, may1, may2, may3 ) AS 'May'
+        )
+    )
+);
