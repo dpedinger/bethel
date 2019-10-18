@@ -1,0 +1,1288 @@
+CREATE OR REPLACE PACKAGE BODY program_outcome_matrix AS
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE upsert_po (
+        p_pog_id           IN   NUMBER
+        , p_po_id          IN   NUMBER
+        , p_po_desc        IN   VARCHAR2
+        , p_po_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_po_desc   IN   VARCHAR2
+        , p_edit_po_seq    IN   VARCHAR2
+    ) IS
+    
+    BEGIN
+    
+        MERGE INTO bthbanr.pom_p_outcome a
+        USING (
+                  SELECT
+                      p_po_id       id
+                      , p_po_desc   description
+                      , p_po_seq    seq
+                  FROM
+                      dual
+              )
+        b ON ( a.id = b.id )
+        WHEN MATCHED THEN UPDATE
+        SET a.description = p_edit_po_desc
+        , a.seq = p_edit_po_seq
+        WHEN NOT MATCHED THEN
+        INSERT (
+            a.id
+            , a.description
+            , a.active_ind
+            , a.eff_date
+            , a.seq )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(po.id), 0) + 1
+                FROM
+                    bthbanr.pom_p_outcome po
+            ) --id
+            , p_edit_po_desc --description
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+            , p_edit_po_seq --seq
+            );
+
+        MERGE INTO bthbanr.pom_xref a
+        USING (
+                  SELECT
+                      p_pog_id     table1_id
+                      , p_po_id    table2_id
+                  FROM
+                      dual
+              )
+        b ON ( ( b.table1_id = a.table1_id
+                 AND b.table2_id = a.table2_id
+                 AND a.table1_name = 'POG'
+                 AND a.table2_name = 'P_OUTCOME' )
+               OR ( b.table2_id = a.table1_id
+                    AND b.table1_id = a.table2_id
+                    AND a.table2_name = 'POG'
+                    AND a.table1_name = 'P_OUTCOME' ) )
+        WHEN MATCHED THEN UPDATE
+        SET a.active_ind = 'Y'
+        WHERE
+            a.active_ind = 'N'
+        WHEN NOT MATCHED THEN
+        INSERT (
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+            , active_ind
+            , eff_date )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(a.id), 0) + 1
+                FROM
+                    bthbanr.pom_xref a
+            ) --id
+            , 'POG' --table1_name
+            , p_pog_id --table1_id
+            , 'P_OUTCOME' --table2_name
+            , (
+                SELECT
+                    CASE
+                        WHEN EXISTS (
+                            SELECT
+                                'x'
+                            FROM
+                                bthbanr.pom_p_outcome
+                            WHERE
+                                description = p_edit_po_desc
+                                AND seq = p_edit_po_seq
+                        ) THEN
+                            (
+                                SELECT
+                                    MAX(id)
+                                FROM
+                                    bthbanr.pom_p_outcome
+                                WHERE
+                                    description = p_edit_po_desc
+                                    AND seq = p_edit_po_seq
+                            )
+                        ELSE
+                            (
+                                SELECT
+                                    nvl(MAX(id), 0) + 1
+                                FROM
+                                    bthbanr.pom_p_outcome
+                            )
+                    END
+                FROM
+                    dual
+            ) --table2_id
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+             )
+        WHERE
+            1 = 1
+            AND NOT EXISTS (
+                SELECT
+                    'x'
+                FROM
+                    bthbanr.pom_xref
+                WHERE
+                    table1_name = 'POG'
+                    AND table1_id = p_pog_id
+                    AND table2_name = 'COMPETENCY'
+                    AND table2_id = (
+                        SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT
+                                        'x'
+                                    FROM
+                                        bthbanr.pom_p_outcome
+                                    WHERE
+                                        description = p_edit_po_desc
+                                        AND seq = p_edit_po_seq
+                                ) THEN
+                                    (
+                                        SELECT
+                                            MAX(id)
+                                        FROM
+                                            bthbanr.pom_p_outcome
+                                        WHERE
+                                            description = p_edit_po_desc
+                                            AND seq = p_edit_po_seq
+                                    )
+                                ELSE
+                                    (
+                                        SELECT
+                                            nvl(MAX(id), 0) + 1
+                                        FROM
+                                            bthbanr.pom_p_outcome
+                                    )
+                            END
+                        FROM
+                            dual
+                    )
+                    AND active_ind = 'Y'
+            );
+
+    END upsert_po;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE upsert_c (
+        p_cg_id           IN   NUMBER
+        , p_c_id          IN   NUMBER
+        , p_c_desc        IN   VARCHAR2
+        , p_c_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_c_desc   IN   VARCHAR2
+        , p_edit_c_seq    IN   VARCHAR2
+    ) IS
+    
+    BEGIN
+    
+        MERGE INTO bthbanr.pom_competency a
+        USING (
+                  SELECT
+                      p_c_id       id
+                      , p_c_desc   description
+                      , p_c_seq    seq
+                  FROM
+                      dual
+              )
+        b ON ( a.id = b.id )
+        WHEN MATCHED THEN UPDATE
+        SET a.description = p_edit_c_desc
+        , a.seq = p_edit_c_seq
+        WHEN NOT MATCHED THEN
+        INSERT (
+            a.id
+            , a.description
+            , a.active_ind
+            , a.eff_date
+            , a.seq )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(c.id), 0) + 1
+                FROM
+                    bthbanr.pom_competency c
+            ) --id
+            , p_edit_c_desc --description
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+            , p_edit_c_seq --seq
+            );
+
+        MERGE INTO bthbanr.pom_xref a
+        USING (
+                  SELECT
+                      p_cg_id     table1_id
+                      , p_c_id    table2_id
+                  FROM
+                      dual
+              )
+        b ON ( ( b.table1_id = a.table1_id
+                 AND b.table2_id = a.table2_id
+                 AND a.table1_name = 'CG'
+                 AND a.table2_name = 'COMPETENCY' )
+               OR ( b.table2_id = a.table1_id
+                    AND b.table1_id = a.table2_id
+                    AND a.table2_name = 'CG'
+                    AND a.table1_name = 'COMPETENCY' ) )
+        WHEN MATCHED THEN UPDATE
+        SET a.active_ind = 'Y'
+        WHERE
+            a.active_ind = 'N'
+        WHEN NOT MATCHED THEN
+        INSERT (
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+            , active_ind
+            , eff_date )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(a.id), 0) + 1
+                FROM
+                    bthbanr.pom_xref a
+            ) --id
+            , 'CG' --table1_name
+            , p_cg_id --table1_id
+            , 'COMPETENCY' --table2_name
+            , (
+                SELECT
+                    CASE
+                        WHEN EXISTS (
+                            SELECT
+                                'x'
+                            FROM
+                                bthbanr.pom_competency po
+                            WHERE
+                                description = p_edit_c_desc
+                                AND seq = p_edit_c_seq
+                        ) THEN
+                            (
+                                SELECT
+                                    MAX(id)
+                                FROM
+                                    bthbanr.pom_competency
+                                WHERE
+                                    description = p_edit_c_desc
+                                    AND seq = p_edit_c_seq
+                            )
+                        ELSE
+                            (
+                                SELECT
+                                    nvl(MAX(id), 0) + 1
+                                FROM
+                                    bthbanr.pom_competency
+                            )
+                    END
+                FROM
+                    dual
+            ) --table2_id
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+             )
+        WHERE
+            1 = 1
+            AND NOT EXISTS (
+                SELECT
+                    'x'
+                FROM
+                    bthbanr.pom_xref
+                WHERE
+                    table1_name = 'CG'
+                    AND table1_id = p_cg_id
+                    AND table2_name = 'COMPETENCY'
+                    AND table2_id = (
+                        SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT
+                                        'x'
+                                    FROM
+                                        bthbanr.pom_competency
+                                    WHERE
+                                        description = p_edit_c_desc
+                                        AND seq = p_edit_c_seq
+                                ) THEN
+                                    (
+                                        SELECT
+                                            MAX(id)
+                                        FROM
+                                            bthbanr.pom_competency
+                                        WHERE
+                                            description = p_edit_c_desc
+                                            AND seq = p_edit_c_seq
+                                    )
+                                ELSE
+                                    (
+                                        SELECT
+                                            nvl(MAX(id), 0) + 1
+                                        FROM
+                                            bthbanr.pom_competency
+                                    )
+                            END
+                        FROM
+                            dual
+                    )
+                    AND active_ind = 'Y'
+            );
+
+    END upsert_c;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE upsert_co (
+        p_course_id        IN   NUMBER
+        , p_co_id          IN   NUMBER
+        , p_co_desc        IN   VARCHAR2
+        , p_co_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_co_desc   IN   VARCHAR2
+        , p_edit_co_seq    IN   VARCHAR2
+    ) IS
+    
+    BEGIN
+    
+        MERGE INTO bthbanr.pom_c_outcome a
+        USING (
+                  SELECT
+                      p_co_id       id
+                      , p_co_desc   description
+                      , p_co_seq    seq
+                  FROM
+                      dual
+              )
+        b ON ( a.id = b.id )
+        WHEN MATCHED THEN UPDATE
+        SET a.description = p_edit_co_desc
+        , a.seq = p_edit_co_seq
+        WHEN NOT MATCHED THEN
+        INSERT (
+            a.id
+            , a.description
+            , a.active_ind
+            , a.eff_date
+            , a.seq )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(c.id), 0) + 1
+                FROM
+                    bthbanr.pom_c_outcome c
+            ) --id
+            , p_edit_co_desc --description
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+            , p_edit_co_seq --seq
+            );
+
+        MERGE INTO bthbanr.pom_xref a
+        USING (
+                  SELECT
+                      p_course_id     table1_id
+                      , p_co_id       table2_id
+                  FROM
+                      dual
+              )
+        b ON ( ( b.table1_id = a.table1_id
+                 AND b.table2_id = a.table2_id
+                 AND a.table1_name = 'COURSE'
+                 AND a.table2_name = 'C_OUTCOME' )
+               OR ( b.table2_id = a.table1_id
+                    AND b.table1_id = a.table2_id
+                    AND a.table2_name = 'COURSE'
+                    AND a.table1_name = 'C_OUTCOME' ) )
+        WHEN MATCHED THEN UPDATE
+        SET a.active_ind = 'Y'
+        WHERE
+            a.active_ind = 'N'
+        WHEN NOT MATCHED THEN
+        INSERT (
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+            , active_ind
+            , eff_date )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(a.id), 0) + 1
+                FROM
+                    bthbanr.pom_xref a
+            ) --id
+            , 'COURSE' --table1_name
+            , p_course_id --table1_id
+            , 'C_OUTCOME' --table2_name
+            , (
+                SELECT
+                    CASE
+                        WHEN EXISTS (
+                            SELECT
+                                'x'
+                            FROM
+                                bthbanr.pom_c_outcome
+                            WHERE
+                                description = p_edit_co_desc
+                                AND seq = p_edit_co_seq
+                        ) THEN
+                            (
+                                SELECT
+                                    MAX(id)
+                                FROM
+                                    bthbanr.pom_c_outcome
+                                WHERE
+                                    description = p_edit_co_desc
+                                    AND seq = p_edit_co_seq
+                            )
+                        ELSE
+                            (
+                                SELECT
+                                    nvl(MAX(id), 0) + 1
+                                FROM
+                                    bthbanr.pom_c_outcome
+                            )
+                    END
+                FROM
+                    dual
+            ) --table2_id
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+             )
+        WHERE
+            1 = 1
+            AND NOT EXISTS (
+                SELECT
+                    'x'
+                FROM
+                    bthbanr.pom_xref
+                WHERE
+                    table1_name = 'COURSE'
+                    AND table1_id = p_course_id
+                    AND table2_name = 'C_OUTCOME'
+                    AND table2_id = (
+                        SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT
+                                        'x'
+                                    FROM
+                                        bthbanr.pom_c_outcome
+                                    WHERE
+                                        description = p_edit_co_desc
+                                        AND seq = p_edit_co_seq
+                                ) THEN
+                                    (
+                                        SELECT
+                                            MAX(id)
+                                        FROM
+                                            bthbanr.pom_c_outcome
+                                        WHERE
+                                            description = p_edit_co_desc
+                                            AND seq = p_edit_co_seq
+                                    )
+                                ELSE
+                                    (
+                                        SELECT
+                                            nvl(MAX(id), 0) + 1
+                                        FROM
+                                            bthbanr.pom_c_outcome
+                                    )
+                            END
+                        FROM
+                            dual
+                    )
+                    AND active_ind = 'Y'
+            );
+
+    END upsert_co;
+    
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE upsert_assess (
+        p_course_id          IN   NUMBER
+        , p_assess_id          IN   NUMBER
+        , p_assess_name        IN   VARCHAR2
+        , p_assess_seq         IN   VARCHAR2 DEFAULT NULL
+        , p_edit_assess_name   IN   VARCHAR2
+        , p_edit_assess_seq    IN   VARCHAR2
+    ) IS
+    
+    BEGIN
+    
+        MERGE INTO bthbanr.pom_assessment a
+        USING (
+                  SELECT
+                      p_assess_id       id
+                      , p_assess_name   name
+                      , p_assess_seq    seq
+                  FROM
+                      dual
+              )
+        b ON ( a.id = b.id )
+        WHEN MATCHED THEN UPDATE
+        SET a.name = p_edit_assess_name
+        , a.seq = p_edit_assess_seq
+        WHEN NOT MATCHED THEN
+        INSERT (
+            a.id
+            , a.name
+            , a.active_ind
+            , a.eff_date
+            , a.seq )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(c.id), 0) + 1
+                FROM
+                    bthbanr.pom_assessment c
+            ) --id
+            , p_edit_assess_name --name
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+            , p_edit_assess_seq --seq
+            );
+
+        MERGE INTO bthbanr.pom_xref a
+        USING (
+                  SELECT
+                      p_course_id     table1_id
+                      , p_assess_id   table2_id
+                  FROM
+                      dual
+              )
+        b ON ( ( b.table1_id = a.table1_id
+                 AND b.table2_id = a.table2_id
+                 AND a.table1_name = 'COURSE'
+                 AND a.table2_name = 'ASSESSMENT' )
+               OR ( b.table2_id = a.table1_id
+                    AND b.table1_id = a.table2_id
+                    AND a.table2_name = 'COURSE'
+                    AND a.table1_name = 'ASSESSMENT' ) )
+        WHEN MATCHED THEN UPDATE
+        SET a.active_ind = 'Y'
+        WHERE
+            a.active_ind = 'N'
+        WHEN NOT MATCHED THEN
+        INSERT (
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+            , active_ind
+            , eff_date )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(a.id), 0) + 1
+                FROM
+                    bthbanr.pom_xref a
+            ) --id
+            , 'COURSE' --table1_name
+            , p_course_id --table1_id
+            , 'ASSESSMENT' --table2_name
+            , (
+                SELECT
+                    CASE
+                        WHEN EXISTS (
+                            SELECT
+                                'x'
+                            FROM
+                                bthbanr.pom_assessment
+                            WHERE
+                                name = p_edit_assess_name
+                                AND seq = p_edit_assess_seq
+                        ) THEN
+                            (
+                                SELECT
+                                    MAX(id)
+                                FROM
+                                    bthbanr.pom_assessment
+                                WHERE
+                                    name = p_edit_assess_name
+                                    AND seq = p_edit_assess_seq
+                            )
+                        ELSE
+                            (
+                                SELECT
+                                    nvl(MAX(id), 0) + 1
+                                FROM
+                                    bthbanr.pom_assessment
+                            )
+                    END
+                FROM
+                    dual
+            ) --table2_id
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+             )
+        WHERE
+            1 = 1
+            AND NOT EXISTS (
+                SELECT
+                    'x'
+                FROM
+                    bthbanr.pom_xref
+                WHERE
+                    table1_name = 'COURSE'
+                    AND table1_id = p_course_id
+                    AND table2_name = 'ASSESSMENT'
+                    AND table2_id = (
+                        SELECT
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT
+                                        'x'
+                                    FROM
+                                        bthbanr.pom_assessment
+                                    WHERE
+                                        name = p_edit_assess_name
+                                        AND seq = p_edit_assess_seq
+                                ) THEN
+                                    (
+                                        SELECT
+                                            MAX(id)
+                                        FROM
+                                            bthbanr.pom_assessment
+                                        WHERE
+                                            name = p_edit_assess_name
+                                            AND seq = p_edit_assess_seq
+                                    )
+                                ELSE
+                                    (
+                                        SELECT
+                                            nvl(MAX(id), 0) + 1
+                                        FROM
+                                            bthbanr.pom_assessment
+                                    )
+                            END
+                        FROM
+                            dual
+                    )
+                    AND active_ind = 'Y'
+            );
+
+    END upsert_assess;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE insert_alias (
+        p_pog_id      IN   NUMBER
+        , p_course_id   IN   NUMBER
+        , p_alias       IN   VARCHAR2
+    ) IS
+    
+        new_id NUMBER;
+        
+    BEGIN
+    
+        SELECT
+            nvl(MAX(c.id), 0) + 1
+        INTO new_id
+        FROM
+            bthbanr.pom_c_alias c;
+
+        INSERT INTO bthbanr.pom_c_alias a (
+            a.id
+            , a.alias
+            , a.active_ind
+            , a.eff_date
+            , a.course_id
+        ) VALUES (
+            new_id --id
+            , p_alias --alias
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+            , p_course_id --course_id
+        );
+
+        MERGE INTO bthbanr.pom_xref a
+        USING (
+                      SELECT
+                          p_pog_id   table1_id
+                        , new_id     table2_id
+                  FROM
+                      dual
+              )
+        b ON ( ( b.table1_id = a.table1_id
+                 AND b.table2_id = a.table2_id
+                 AND a.table1_name = 'POG'
+                     AND a.table2_name = 'C_ALIAS' )
+               OR ( b.table2_id = a.table1_id
+                    AND b.table1_id = a.table2_id
+                    AND a.table2_name = 'POG'
+                    AND a.table1_name = 'C_ALIAS' ) )
+        WHEN MATCHED THEN UPDATE
+        SET a.active_ind = 'Y'
+        WHERE
+            a.active_ind = 'N'
+        WHEN NOT MATCHED THEN
+        INSERT (
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+            , active_ind
+            , eff_date )
+        VALUES
+            ( (
+                SELECT
+                    nvl(MAX(a.id), 0) + 1
+                    FROM
+                    bthbanr.pom_xref a
+            ) --id
+            , 'POG' --table1_name
+            , p_pog_id --table1_id
+            , 'C_ALIAS' --table2_name
+            , new_id --table2_id
+            , 'Y' --active_ind
+            , SYSDATE --eff_date
+             )
+        WHERE
+            1 = 1
+            AND NOT EXISTS (
+                SELECT
+                    'x'
+                FROM
+                    bthbanr.pom_xref
+                    WHERE
+                        table1_name = 'POG'
+                    AND table1_id = p_pog_id
+                    AND table2_name = 'C_ALIAS'
+                    AND table2_id = new_id
+                    AND active_ind = 'Y'
+            );
+
+    END insert_alias;
+    
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_course (
+        p_course_id       IN   NUMBER
+    ) IS
+
+        CURSOR get_alias (
+            c_course_id NUMBER
+        ) IS
+        SELECT
+            alias.id
+        FROM
+            bthbanr.pom_c_alias alias
+        WHERE alias.course_id = c_course_id
+            AND alias.active_ind = 'Y';
+
+        CURSOR get_x_co (
+            c_course_id NUMBER
+        ) IS
+        SELECT
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+        FROM
+            bthbanr.pom_xref
+        WHERE
+            ( ( table1_name = 'COURSE'
+                AND table1_id = c_course_id
+                AND table2_name = 'C_OUTCOME' )
+              OR ( table2_name = 'COURSE'
+                   AND table2_id = c_course_id
+                   AND table1_name = 'C_OUTCOME' ) )
+            AND active_ind = 'Y';
+
+        CURSOR get_x_assess (
+            c_course_id NUMBER
+        ) IS
+        SELECT
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+        FROM
+            bthbanr.pom_xref
+        WHERE
+            ( ( table1_name = 'COURSE'
+                AND table1_id = c_course_id
+                AND table2_name = 'ASSESSMENT' )
+              OR ( table2_name = 'COURSE'
+                   AND table2_id = c_course_id
+                   AND table1_name = 'ASSESSMENT' ) )
+            AND active_ind = 'Y';
+
+        CURSOR get_co (
+            c_table1_id       NUMBER
+            , c_table1_name   VARCHAR2
+            , c_table2_id     NUMBER
+            , c_table2_name   VARCHAR2
+        ) IS
+        SELECT
+            co.id
+        FROM
+            bthbanr.pom_c_outcome co
+        WHERE
+            ( ( c_table1_name = 'COURSE'
+                AND c_table2_name = 'C_OUTCOME'
+                AND c_table2_id = co.id )
+              OR ( c_table2_name = 'COURSE'
+                   AND c_table1_name = 'C_OUTCOME'
+                   AND c_table1_id = co.id ) )
+            AND co.active_ind = 'Y';
+
+        alias_rec      get_alias%rowtype;
+        x_co_rec       get_x_co%rowtype;
+        x_assess_rec   get_x_assess%rowtype;
+        co_rec         get_co%rowtype;
+        
+    BEGIN
+    
+        OPEN get_alias(p_course_id);
+        
+        LOOP
+        
+            FETCH get_alias INTO alias_rec;
+            EXIT WHEN get_alias%notfound;
+            DELETE FROM bthbanr.pom_xref xref
+            where (( xref.table1_id = alias_rec.id
+                    AND xref.table1_name = 'C_ALIAS' )
+                  OR ( xref.table2_id = alias_rec.id
+                       AND xref.table2_name = 'C_ALIAS' ) );
+
+            DELETE FROM bthbanr.pom_c_alias alias
+            WHERE
+                alias.id = alias_rec.id;
+
+        END LOOP;
+
+        CLOSE get_alias;
+        
+        OPEN get_x_co(p_course_id);
+        
+        LOOP
+        
+            FETCH get_x_co INTO x_co_rec;
+            
+            EXIT WHEN get_x_co%notfound;
+            
+            OPEN get_co(x_co_rec.table1_id, x_co_rec.table1_name,
+                        x_co_rec.table2_id, x_co_rec.table2_name);
+
+            LOOP
+            
+                FETCH get_co INTO co_rec;
+                
+                EXIT when get_co%notfound;
+                
+                DELETE FROM bthbanr.pom_xref xref
+                WHERE
+                    ( ( xref.table1_id = co_rec.id
+                        AND xref.table1_name = 'C_OUTCOME'
+                        AND xref.table2_name IN (
+                        'P_OUTCOME'
+                        , 'COMPETENCY'
+                        , 'ASSESSMENT'
+                    ) )
+                      OR ( xref.table2_id = co_rec.id
+                           AND xref.table2_name = 'C_OUTCOME'
+                           AND xref.table1_name IN (
+                        'P_OUTCOME'
+                        , 'COMPETENCY'
+                        , 'ASSESSMENT'
+                    ) ) );
+
+                DELETE FROM bthbanr.pom_c_outcome co
+                WHERE
+                    co.id = co_rec.id;
+
+            END LOOP;
+
+            CLOSE get_co;
+            
+            DELETE FROM bthbanr.pom_xref xref
+            WHERE
+                xref.id = x_co_rec.id;
+
+        END LOOP;
+
+        CLOSE get_x_co;
+        
+        OPEN get_x_assess(p_course_id);
+        
+        LOOP
+        
+            FETCH get_x_assess INTO x_assess_rec;
+            
+            EXIT WHEN get_x_assess%notfound;
+            
+            DELETE FROM bthbanr.pom_assessment assess
+            WHERE
+                ( ( assess.id = x_assess_rec.table1_id
+                    AND x_assess_rec.table1_name = 'ASSESSMENT' )
+                  OR ( assess.id = x_assess_rec.table2_id
+                       AND x_assess_rec.table2_name = 'ASSESSMENT' ) );
+
+            DELETE FROM bthbanr.pom_xref xref
+            WHERE
+                xref.id = x_assess_rec.id;
+
+        END LOOP;
+
+        CLOSE get_x_assess;
+        
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'COURSE'
+                AND x.table1_id = p_course_id )
+              OR ( x.table2_name = 'COURSE'
+                   AND x.table2_id = p_course_id ) );
+
+        DELETE FROM bthbanr.pom_course course
+        WHERE
+            course.id = p_course_id;
+
+        COMMIT;
+        
+    END delete_course;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_pog (
+        p_pog_id IN NUMBER
+    ) IS
+
+        CURSOR get_x_po (
+            c_pog_id NUMBER
+        ) IS
+        SELECT
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+        FROM
+            bthbanr.pom_xref
+        WHERE
+            ( ( table1_name = 'POG'
+                AND table1_id = c_pog_id
+                AND table2_name = 'P_OUTCOME' )
+              OR ( table2_name = 'POG'
+                   AND table2_id = c_pog_id
+                   AND table1_name = 'P_OUTCOME' ) )
+            AND active_ind = 'Y';
+
+        CURSOR get_po (
+            c_table1_id       NUMBER
+            , c_table1_name   VARCHAR2
+            , c_table2_id     NUMBER
+            , c_table2_name   VARCHAR2
+        ) IS
+        SELECT
+            po.id
+        FROM
+            bthbanr.pom_p_outcome po
+        WHERE
+            ( ( c_table1_name = 'POG'
+                AND c_table2_name = 'P_OUTCOME'
+                AND c_table2_id = po.id )
+              OR ( c_table2_name = 'POG'
+                   AND c_table1_name = 'P_OUTCOME'
+                   AND c_table1_id = po.id ) )
+            AND po.active_ind = 'Y';
+
+        x_po_rec   get_x_po%rowtype;
+        po_rec     get_po%rowtype;
+        
+    BEGIN
+    
+        OPEN get_x_po(p_pog_id);
+        
+        LOOP
+        
+            FETCH get_x_po INTO x_po_rec;
+            
+            EXIT WHEN get_x_po%notfound;
+            
+            OPEN get_po(x_po_rec.table1_id, x_po_rec.table1_name,
+                        x_po_rec.table2_id, x_po_rec.table2_name);
+
+            LOOP
+            
+                FETCH get_po INTO po_rec;
+                
+                EXIT WHEN get_po%notfound;
+                
+                DELETE FROM bthbanr.pom_xref xref
+                WHERE
+                    ( ( xref.table1_id = po_rec.id
+                        AND xref.table1_name = 'P_OUTCOME'
+                        AND xref.table2_name = 'C_OUTCOME' )
+                      OR ( xref.table2_id = po_rec.id
+                           AND xref.table2_name = 'P_OUTCOME'
+                           AND xref.table1_name = 'C_OUTCOME' ) );
+
+                DELETE FROM bthbanr.pom_p_outcome po
+                WHERE
+                    po.id = po_rec.id;
+
+            END LOOP;
+
+            CLOSE get_po;
+            
+            DELETE FROM bthbanr.pom_xref xref
+            WHERE
+                xref.id = x_po_rec.id;
+
+        END LOOP;
+
+        CLOSE get_x_po;
+        
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'POG'
+                AND x.table1_id = p_pog_id )
+              OR ( x.table2_name = 'POG'
+                   AND x.table2_id = p_pog_id ) );
+
+        DELETE FROM bthbanr.pom_pog pog
+        WHERE
+            pog.id = p_pog_id;
+
+        COMMIT;
+        
+    END delete_pog;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_po (
+        p_po_id IN NUMBER
+    ) IS
+    
+    BEGIN
+    
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'P_OUTCOME'
+                AND x.table1_id = p_po_id )
+              OR ( x.table2_name = 'P_OUTCOME'
+                   AND x.table2_id = p_po_id ) );
+
+        DELETE FROM bthbanr.pom_p_outcome po
+        WHERE
+            po.id = p_po_id;
+
+        COMMIT;
+        
+    END delete_po;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_co (
+        p_co_id IN NUMBER
+    ) IS
+    
+    BEGIN
+    
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'C_OUTCOME'
+                AND x.table1_id = p_co_id )
+              OR ( x.table2_name = 'C_OUTCOME'
+                   AND x.table2_id = p_co_id ) );
+
+        DELETE FROM bthbanr.pom_c_outcome co
+        WHERE
+            co.id = p_co_id;
+
+        COMMIT;
+        
+    END delete_co;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_cg (
+        p_cg_id IN NUMBER
+    ) IS
+
+        CURSOR get_x_c (
+            c_cg_id NUMBER
+        ) IS
+        SELECT
+            id
+            , table1_name
+            , table1_id
+            , table2_name
+            , table2_id
+        FROM
+            bthbanr.pom_xref
+        WHERE
+            ( ( table1_name = 'CG'
+                AND table1_id = c_cg_id
+                AND table2_name = 'COMPETENCY' )
+              OR ( table2_name = 'CG'
+                   AND table2_id = c_cg_id
+                   AND table1_name = 'COMPETENCY' ) )
+            AND active_ind = 'Y';
+
+        CURSOR get_c (
+            c_table1_id       NUMBER
+            , c_table1_name   VARCHAR2
+            , c_table2_id     NUMBER
+            , c_table2_name   VARCHAR2
+        ) IS
+        SELECT
+            c.id
+        FROM
+            bthbanr.pom_competency c
+        WHERE
+            ( ( c_table1_name = 'CG'
+                AND c_table2_name = 'COMPETENCY'
+                AND c_table2_id = c.id )
+              OR ( c_table2_name = 'CG'
+                   AND c_table1_name = 'COMPETENCY'
+                   AND c_table1_id = c.id ) )
+            AND c.active_ind = 'Y';
+
+        x_c_rec   get_x_c%rowtype;
+        c_rec     get_c%rowtype;
+        
+    BEGIN
+    
+        OPEN get_x_c(p_cg_id);
+        
+        LOOP
+        
+            FETCH get_x_c INTO x_c_rec;
+            
+            EXIT WHEN get_x_c%notfound;
+            
+            OPEN get_c(x_c_rec.table1_id, x_c_rec.table1_name,
+                        x_c_rec.table2_id, x_c_rec.table2_name);
+
+            LOOP
+            
+                FETCH get_c INTO c_rec;
+                
+                EXIT WHEN get_c%notfound;
+                
+                DELETE FROM bthbanr.pom_xref xref
+                WHERE
+                    ( ( xref.table1_id = c_rec.id
+                        AND xref.table1_name = 'COMPETENCY'
+                        AND xref.table2_name = 'C_OUTCOME' )
+                      OR ( xref.table2_id = c_rec.id
+                           AND xref.table2_name = 'COMPETENCY'
+                           and xref.table1_name = 'C_OUTCOME' ) );
+
+                DELETE FROM bthbanr.pom_competency c
+                WHERE
+                    c.id = c_rec.id;
+
+            END LOOP;
+
+            CLOSE get_c;
+            
+            DELETE FROM bthbanr.pom_xref xref
+            WHERE
+                xref.id = x_c_rec.id;
+
+        END LOOP;
+
+        CLOSE get_x_c;
+        
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'CG'
+                AND x.table1_id = p_cg_id )
+              OR ( x.table2_name = 'CG'
+                   AND x.table2_id = p_cg_id ) );
+
+        DELETE FROM bthbanr.pom_cg cg
+        WHERE
+            cg.id = p_cg_id;
+
+        COMMIT;
+        
+    END delete_cg;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_c (
+        p_c_id IN NUMBER
+    ) IS
+    
+    BEGIN
+    
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'COMPETENCY'
+                AND x.table1_id = p_c_id )
+              OR ( x.table2_name = 'COMPETENCY'
+                   AND x.table2_id = p_c_id ) );
+
+        DELETE FROM bthbanr.pom_competency c
+        WHERE
+            c.id = p_c_id;
+
+        COMMIT;
+        
+    END delete_c;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_assess (
+        p_assess_id IN NUMBER
+    ) IS
+    
+    BEGIN
+    
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'ASSESSMENT'
+                AND x.table1_id = p_assess_id )
+              OR ( x.table2_name = 'ASSESSMENT'
+                   AND x.table2_id = p_assess_id ) );
+
+        DELETE FROM bthbanr.pom_assessment assess
+        WHERE
+            assess.id = p_assess_id;
+
+        COMMIT;
+        
+    END delete_assess;
+
+----------------------------------------------------------------------------------------------------
+
+    PROCEDURE delete_alias (
+        p_alias_id IN NUMBER
+    ) IS
+    
+    BEGIN
+    
+        DELETE FROM bthbanr.pom_xref x
+        WHERE
+            ( ( x.table1_name = 'C_ALIAS'
+                AND x.table1_id = p_alias_id )
+              OR ( x.table2_name = 'C_ALIAS'
+                   AND x.table2_id = p_alias_id ) );
+
+        DELETE FROM bthbanr.pom_c_alias calias
+        WHERE
+            calias.id = p_alias_id;
+
+        COMMIT;
+        
+    END delete_alias;
+
+----------------------------------------------------------------------------------------------------
+
+END program_outcome_matrix;
