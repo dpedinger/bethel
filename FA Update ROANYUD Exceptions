@@ -1,0 +1,90 @@
+SPOOL &1
+
+
+--update robnyud counselors mismatched from exception table
+
+UPDATE robnyud
+SET
+    robnyud_value_19 = (
+        SELECT
+            counselor
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    )
+, robnyud_value_20 = (
+        SELECT
+            counselor_sec
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    )
+, robnyud_value_39 = (
+        SELECT
+            verif_counselor
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    )
+, robnyud_value_40 = (
+        SELECT
+            verif_counselor_sec
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    )
+, robnyud_user_id = 'BANWORX'
+, robnyud_activity_date = SYSDATE
+WHERE
+    EXISTS (
+        SELECT
+            'x'
+        FROM bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD')
+    AND ( ( nvl(robnyud_value_19, 'x') <> (
+        SELECT
+            counselor
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD') )
+          OR ( nvl(robnyud_value_20, 'x') <> (
+        SELECT nvl(counselor_sec, 'x')
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    ) )
+          OR ( nvl(robnyud_value_39, 'x') <> (
+        SELECT
+            verif_counselor
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    ) )
+          OR ( nvl(robnyud_value_38, 'x') <> (
+        SELECT
+            nvl(verif_counselor_sec, 'x')
+        FROM
+            bthbanr.fa_counselor_exceptions
+        WHERE
+            pidm = robnyud_pidm
+            AND aidy_code = 'NYUD'
+    ) ) );
+
+COMMIT;
+/
