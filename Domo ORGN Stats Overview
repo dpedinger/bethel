@@ -1,0 +1,858 @@
+CREATE OR REPLACE FORCE EDITIONABLE VIEW "BTHBANR"."DOMO_ORGN_STATS_OVERVIEW" (
+    "FY"
+    , "ORGN"
+    , "AVG_ENROLL"
+    , "CRED_HRS_SOLD"
+    , "TEUS"
+    , "GROSS_REV"
+    , "EXPENSES"
+    , "NET_CONTRIB"
+) AS
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+-- USES UNIONS                                                                                     --
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+    /* Aggregates average enrollment, total credit hours, total TEUs for each ORGN */
+    SELECT
+        lpad(to_number(substr(dataset2.fy, 3, 2)) - 1 || '-' || substr(dataset2.fy, 3,2), 5, '0') fy
+        , dataset2.orgn orgn
+        , AVG(dataset2.enroll_count) avg_enroll
+        , SUM(dataset2.credit_hours) cred_hrs_sold
+        , SUM(dataset2.teu) TEUs
+        , NULL gross_rev
+        , NULL expenses
+        , NULL net_contrib
+    FROM
+  ( 
+            /* Aggregates sum of credit hours and enrollment count for each CAPS/GS course */
+            SELECT
+                /* Include summer term in next fiscal year */
+                CASE
+                    WHEN substr(dataset.sfrstcr_term_code, 5, 1) = '7' THEN
+                        to_number(substr(dataset.sfrstcr_term_code, 1, 4)) + 1
+                    ELSE
+                        to_number(substr(dataset.sfrstcr_term_code,1,4))
+                END fy
+                , dataset.tbracct_b_orgn_code || ' - ' || dataset.ftvorgn_title orgn
+                , dataset.sfrstcr_crn
+                , SUM(dataset.credit_hours) credit_hours
+                , dataset.teu --null
+                , COUNT(dataset.sfrstcr_pidm) enroll_count
+            FROM
+                (
+                    /* Dataset used for CAPS/GS sum of credit hours and enrollment count */
+                    SELECT
+                        sfrstcr_term_code
+                        , sfrstcr_pidm
+                        , sfrstcr_crn
+                        , tbracct_b_orgn_code
+                        , ftvorgn_title
+                        , CASE
+                            WHEN nvl(ssbsect.ssbsect_enrl, 0) = 0 THEN
+                                NULL
+                            ELSE
+                                ssbsect.ssbsect_tot_credit_hrs / ssbsect.ssbsect_enrl
+                        END credit_hours
+                        , NULL teu
+                    FROM
+                        sfrstcr
+                        JOIN stvterm
+                        ON stvterm_code = sfrstcr_term_code
+                        JOIN ssbsect
+                        ON ssbsect.ssbsect_term_code = sfrstcr_term_code
+                           AND ssbsect.ssbsect_crn = sfrstcr_crn
+                        /* Only include registered, exclude audits */
+                        JOIN stvrsts
+                        ON stvrsts_code = sfrstcr_rsts_code
+                           AND stvrsts_voice_type IN (
+                            'R'
+                        )
+                           AND stvrsts_code <> 'AU'
+                        /* ORGN determined by course charges - U### and V### detail codes */
+                        JOIN tbraccd
+                        ON tbraccd_pidm = sfrstcr_pidm
+                           AND tbraccd_term_code = sfrstcr_term_code
+                           AND tbraccd_crn = sfrstcr_crn
+                           AND ( tbraccd_detail_code LIKE 'U%'
+                                 OR tbraccd_detail_code LIKE 'V%' )
+                           AND tbraccd_entry_date = (
+                            SELECT
+                                MAX(t.tbraccd_entry_date)
+                            FROM
+                                tbraccd t
+                            WHERE
+                                t.tbraccd_pidm = tbraccd.tbraccd_pidm
+                                AND t.tbraccd_term_code = tbraccd.tbraccd_term_code
+                                AND t.tbraccd_crn = tbraccd.tbraccd_crn
+                                AND t.tbraccd_detail_code = tbraccd.tbraccd_detail_code
+                        )
+                        JOIN tbracct
+                        ON tbracct_detail_code = tbraccd_detail_code
+                           AND tbracct_detc_eff_date = (
+                            SELECT
+                                MAX(b.tbracct_detc_eff_date)
+                            FROM
+                                tbracct b
+                            WHERE
+                                b.tbracct_detail_code = tbracct.tbracct_detail_code
+                        )
+                        JOIN ftvorgn
+                        ON ftvorgn_orgn_code = tbracct_b_orgn_code
+                           AND ftvorgn_status_ind = 'A'
+                           AND ftvorgn_nchg_date = TO_DATE('31-DEC-99', 'DD-MON-YY')
+                        JOIN sirasgn
+                        ON sirasgn_crn = sfrstcr_crn
+                           AND sirasgn_primary_ind = 'Y'
+                           AND sirasgn_term_code = sfrstcr_term_code
+                    WHERE
+                        /* ORGN by course charge only applicable to CAPS/GS */
+                        substr(ssbsect.ssbsect_term_code, 6, 1) = '2'
+                        AND ssbsect.ssbsect_term_code >= '200772'
+                        AND EXISTS (
+                            SELECT
+                                ssrmeet_crn
+                            FROM
+                                ssrmeet
+                            WHERE
+                                ssrmeet_crn = ssbsect.ssbsect_crn
+                                AND ssrmeet_term_code = ssbsect.ssbsect_term_code
+                        )
+                ) dataset
+            GROUP BY
+                    CASE
+                        WHEN substr(dataset.sfrstcr_term_code, 5, 1) = '7' THEN
+                            to_number(substr(dataset.sfrstcr_term_code, 1, 4)) + 1
+                        ELSE
+                            to_number(substr(dataset.sfrstcr_term_code, 1, 4))
+                    END
+                    , dataset.tbracct_b_orgn_code || ' - ' || dataset.ftvorgn_title
+                    , dataset.sfrstcr_crn
+                    , dataset.teu
+    --------------------------------------
+    --------------------------------------
+            UNION ALL
+    --------------------------------------
+    --------------------------------------
+        /* Gets non-instructional TEUs for each course */
+            SELECT
+                /* Include summer term in next fiscal year */
+                CASE
+                    WHEN substr(sirnist_term_code, 5, 1) = '7' THEN
+                        to_number(substr(sirnist_term_code, 1, 4)) + 1
+                    ELSE
+                        to_number(substr(sirnist_term_code, 1, 4))
+                END fy
+                /* ORGN of course determined by department and level */
+                , ftvorgn_code || ' - ' || ftvorgn_title orgn
+                , NULL sfrstcr_crn
+                , NULL credit_hours
+                , sirnist_nist_workload teu
+                , NULL enroll_count
+            FROM
+                sirnist
+                JOIN ftvorgn
+                ON ftvorgn_orgn_code =
+                    /* ORGN of course determined by department and level */
+                    CASE
+                        WHEN sirnist_dept_code = 'GESA'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25130'
+                        WHEN sirnist_dept_code = 'GENS'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25130'
+                        WHEN sirnist_dept_code = 'CORE'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25131'
+                        WHEN sirnist_dept_code = 'CEDU'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25145'
+                        WHEN sirnist_dept_code = 'CHMN'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25205'
+                        WHEN sirnist_dept_code = 'ORGL'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25215'
+                        WHEN sirnist_dept_code = 'BUSN'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25220'
+                        WHEN sirnist_dept_code = 'NURS'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25225'
+                        WHEN sirnist_dept_code = 'COMM'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25230'
+                        WHEN sirnist_dept_code = 'HRMA'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25235'
+                        WHEN sirnist_dept_code = 'HUSE'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25250'
+                        WHEN sirnist_dept_code = 'EDUC'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25305'
+                        WHEN sirnist_dept_code = 'PSYC'
+                             AND sirnist_coll_code = 'AP' THEN
+                            '25249'
+                        WHEN sirnist_dept_code = 'SPEG'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25310'
+                        WHEN sirnist_dept_code = 'LIEG'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25315'
+                        WHEN sirnist_dept_code = 'TEAG'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25320'
+                        WHEN sirnist_dept_code = 'PSYC'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25330'
+                        WHEN sirnist_dept_code = 'ORGL'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25335'
+                        WHEN sirnist_dept_code = 'MASL'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25359'
+                        WHEN sirnist_dept_code = 'LEAD' THEN
+                            '25358'
+                        WHEN sirnist_dept_code = 'SLDR' THEN
+                            '25359'
+                        WHEN sirnist_dept_code = 'NURS'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25340'
+                        WHEN sirnist_dept_code = 'COMM'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25345'
+                        WHEN sirnist_dept_code = 'GRTG'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25355'
+                        WHEN sirnist_dept_code = 'BUSN'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25360'
+                        WHEN sirnist_dept_code = 'EDUC'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25370'
+                        WHEN sirnist_dept_code = 'PHAS'
+                             AND sirnist_coll_code = 'GR' THEN
+                            '25375'
+                        WHEN sirnist_dept_code = 'CASD' THEN
+                            '25155'
+                        WHEN sirnist_dept_code = 'CIBE' THEN
+                            '25160'
+                        WHEN sirnist_dept_code = 'HCLP' THEN
+                            '25165'
+                        WHEN sirnist_dept_code = 'LIEG' THEN
+                            '25315'
+                        WHEN sirnist_dept_code = 'SPEG' THEN
+                            '25310'
+                        WHEN sirnist_dept_code = 'TCKT' THEN
+                            '25170'
+                        WHEN sirnist_dept_code = 'TEAG' THEN
+                            '25320'
+                        WHEN sirnist_dept_code = 'TWBL' THEN
+                            '25150'
+                        WHEN sirnist_dept_code = 'WCTR' THEN
+                            '25135'
+                        WHEN sirnist_dept_code = 'EDLD' THEN
+                            '25370'
+                        WHEN sirnist_dept_code = 'COAD' THEN
+                            '25105'
+                        WHEN sirnist_dept_code = 'MIDW' THEN
+                            '25380'
+                        WHEN sirnist_dept_code = 'STEM' THEN
+                            '25161'
+                        WHEN sirnist_dept_code = 'ENVY' THEN
+                            '25162'
+                        WHEN sirnist_dept_code = 'FINA' THEN
+                            '25221'
+                        WHEN sirnist_dept_code = 'ACCT' THEN
+                            '25222'
+                        WHEN sirnist_dept_code = 'MIST' THEN
+                            '25223'
+                        WHEN sirnist_dept_code = 'EDCM' THEN
+                            '25111'
+                        WHEN sirnist_dept_code = 'HEHS' THEN
+                            '25112'
+                        WHEN sirnist_dept_code = 'BULE' THEN
+                            '25113'
+                        WHEN sirnist_dept_code = 'ACCT' THEN
+                            '25222'
+                        WHEN sirnist_dept_code = 'ATTR' THEN
+                            '25376'
+                        WHEN sirnist_dept_code = 'ATRN' THEN
+                            '25376'
+                        WHEN sirnist_dept_code = 'BT'   THEN
+                            '31150'
+                        WHEN sirnist_dept_code = 'CF'   THEN
+                            '31240'
+                        WHEN sirnist_dept_code = 'CM'   THEN
+                            '31220'
+                        WHEN sirnist_dept_code = 'CP'   THEN
+                            '31170'
+                        WHEN sirnist_dept_code = 'CT'   THEN
+                            '31190'
+                        WHEN sirnist_dept_code = 'DC'   THEN
+                            '31170'
+                        WHEN sirnist_dept_code = 'GC'   THEN
+                            '31210'
+                        WHEN sirnist_dept_code = 'GS'   THEN
+                            '31170'
+                        WHEN sirnist_dept_code = 'HS'   THEN
+                            '31160'
+                        WHEN sirnist_dept_code = 'MF'   THEN
+                            '32230'
+                        WHEN sirnist_dept_code = 'ML'   THEN
+                            '31200'
+                        WHEN sirnist_dept_code = 'NT'   THEN
+                            '31150'
+                        WHEN sirnist_dept_code = 'OT'   THEN
+                            '31150'
+                        WHEN sirnist_dept_code = 'PC'   THEN
+                            '31180'
+                        WHEN sirnist_dept_code = 'PH'   THEN
+                            '31160'
+                        WHEN sirnist_dept_code = 'SP'   THEN
+                            '31180'
+                        WHEN sirnist_dept_code = 'TL'   THEN
+                            '31200'
+                        WHEN sirnist_dept_code = 'TS'   THEN
+                            '31160'
+                    END
+                   AND trunc(ftvorgn_nchg_date) = trunc(TO_DATE('31-DEC-99', 'DD-MON-YY'))
+            WHERE
+                /* Exclude CAS */
+                substr(sirnist_term_code, 6, 1) IN (
+                    2
+                    , 3
+                )
+                AND sirnist_term_code >= '200772'
+                AND sirnist_term_code <= fz_get_current_term(SYSDATE, substr(sirnist_term_code, 6, 1)
+                )
+    --------------------------------------
+    --------------------------------------
+            UNION ALL
+    --------------------------------------
+    --------------------------------------
+            /* Gets instructional TEUs for each course */
+            SELECT
+                /* Include summer term in next fiscal year */
+                CASE
+                    WHEN substr(sirasgn_term_code, 5, 1) = '7' THEN
+                        to_number(substr(sirasgn_term_code, 1, 4)) + 1
+                    ELSE
+                        to_number(substr(sirasgn_term_code, 1, 4))
+                END fy
+                , ftvorgn_code || ' - ' || ftvorgn_title orgn
+                , NULL sfrstcr_crn
+                , NULL credit_hours
+                , nvl(sirasgn_workload_adjust, scrschd_workload * sirasgn_percent_response / 100) teu
+                , NULL enroll_count
+            FROM
+                sirasgn
+                JOIN sirdpcl
+                ON sirdpcl_pidm = sirasgn_pidm
+                   AND sirdpcl_home_ind = 'Y'
+                   AND sirdpcl_term_code_eff = (
+                    SELECT
+                        MAX(dpcl2.sirdpcl_term_code_eff)
+                    FROM
+                        sirdpcl dpcl2
+                    WHERE
+                        dpcl2.sirdpcl_pidm = sirdpcl.sirdpcl_pidm
+                        AND dpcl2.sirdpcl_term_code_eff <= sirasgn_term_code
+                        /* Use home department */
+                        AND dpcl2.sirdpcl_home_ind = 'Y'
+                )
+                JOIN ssbsect
+                ON ssbsect_crn = sirasgn_crn
+                   AND ssbsect_term_code = sirasgn_term_code
+                   AND ssbsect_ssts_code = 'A'
+                JOIN scbcrse
+                ON scbcrse_subj_code = ssbsect_subj_code
+                   AND scbcrse_crse_numb = ssbsect_crse_numb
+                   AND scbcrse_eff_term = (
+                    SELECT
+                        MAX(crse1.scbcrse_eff_term)
+                    FROM
+                        scbcrse crse1
+                    WHERE
+                        crse1.scbcrse_subj_code = ssbsect_subj_code
+                        AND crse1.scbcrse_crse_numb = ssbsect_crse_numb
+                        AND crse1.scbcrse_eff_term <= sirasgn_term_code
+                )
+                JOIN scrschd
+                ON scrschd_subj_code = ssbsect_subj_code
+                   AND scrschd_crse_numb = ssbsect_crse_numb
+                   AND scrschd_eff_term = (
+                    SELECT
+                        MAX(a.scrschd_eff_term)
+                    FROM
+                        scrschd a
+                    WHERE
+                        a.scrschd_subj_code = ssbsect_subj_code
+                        AND a.scrschd_crse_numb = ssbsect_crse_numb
+                        AND a.scrschd_eff_term <= sirasgn_term_code
+                )
+                   AND scrschd_schd_code IN (
+                    SELECT UNIQUE
+                        meet1.ssrmeet_schd_code
+                    FROM
+                        ssrmeet meet1
+                    WHERE
+                        meet1.ssrmeet_term_code = sirasgn_term_code
+                        AND meet1.ssrmeet_crn = sirasgn_crn
+                        AND meet1.ssrmeet_catagory = sirasgn_category
+                )
+                JOIN ftvorgn
+                ON ftvorgn_orgn_code =
+                    /* ORGN of course determined by department and level */
+                    CASE
+                        WHEN sirdpcl_dept_code = 'GESA'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25130'
+                        WHEN sirdpcl_dept_code = 'GENS'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25130'
+                        WHEN sirdpcl_dept_code = 'CORE'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25131'
+                        WHEN sirdpcl_dept_code = 'CEDU'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25145'
+                        WHEN sirdpcl_dept_code = 'CHMN'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25205'
+                        WHEN sirdpcl_dept_code = 'ORGL'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25215'
+                        WHEN sirdpcl_dept_code = 'BUSN'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25220'
+                        WHEN sirdpcl_dept_code = 'NURS'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25225'
+                        WHEN sirdpcl_dept_code = 'COMM'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25230'
+                        WHEN sirdpcl_dept_code = 'HRMA'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25235'
+                        WHEN sirdpcl_dept_code = 'HUSE'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25250'
+                        WHEN sirdpcl_dept_code = 'EDUC'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25305'
+                        WHEN sirdpcl_dept_code = 'PSYC'
+                             AND sirdpcl_coll_code = 'AP' THEN
+                            '25249'
+                        WHEN sirdpcl_dept_code = 'SPEG'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25310'
+                        WHEN sirdpcl_dept_code = 'LIEG'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25315'
+                        WHEN sirdpcl_dept_code = 'TEAG'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25320'
+                        WHEN sirdpcl_dept_code = 'PSYC'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25330'
+                        WHEN sirdpcl_dept_code = 'ORGL'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25335'
+                        WHEN sirdpcl_dept_code = 'MASL'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25359'
+                        WHEN sirdpcl_dept_code = 'LEAD' THEN
+                            '25358'
+                        WHEN sirdpcl_dept_code = 'SLDR' THEN
+                            '25359'
+                        WHEN sirdpcl_dept_code = 'NURS'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25340'
+                        WHEN sirdpcl_dept_code = 'COMM'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25345'
+                        WHEN sirdpcl_dept_code = 'GRTG'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25355'
+                        WHEN sirdpcl_dept_code = 'BUSN'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25360'
+                        WHEN sirdpcl_dept_code = 'EDUC'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25370'
+                        WHEN sirdpcl_dept_code = 'PHAS'
+                             AND sirdpcl_coll_code = 'GR' THEN
+                            '25375'
+                        WHEN sirdpcl_dept_code = 'CASD' THEN
+                            '25155'
+                        WHEN sirdpcl_dept_code = 'CIBE' THEN
+                            '25160'
+                        WHEN sirdpcl_dept_code = 'HCLP' THEN
+                            '25165'
+                        WHEN sirdpcl_dept_code = 'LIEG' THEN
+                            '25315'
+                        WHEN sirdpcl_dept_code = 'SPEG' THEN
+                            '25310'
+                        WHEN sirdpcl_dept_code = 'TCKT' THEN
+                            '25170'
+                        WHEN sirdpcl_dept_code = 'TEAG' THEN
+                            '25320'
+                        WHEN sirdpcl_dept_code = 'TWBL' THEN
+                            '25150'
+                        WHEN sirdpcl_dept_code = 'WCTR' THEN
+                            '25135'
+                        WHEN sirdpcl_dept_code = 'EDLD' THEN
+                            '25370'
+                        WHEN sirdpcl_dept_code = 'COAD' THEN
+                            '25105'
+                        WHEN sirdpcl_dept_code = 'MIDW' THEN
+                            '25380'
+                        WHEN sirdpcl_dept_code = 'STEM' THEN
+                            '25161'
+                        WHEN sirdpcl_dept_code = 'ENVY' THEN
+                            '25162'
+                        WHEN sirdpcl_dept_code = 'FINA' THEN
+                            '25221'
+                        WHEN sirdpcl_dept_code = 'ACCT' THEN
+                            '25222'
+                        WHEN sirdpcl_dept_code = 'MIST' THEN
+                            '25223'
+                        WHEN sirdpcl_dept_code = 'EDCM' THEN
+                            '25111'
+                        WHEN sirdpcl_dept_code = 'HEHS' THEN
+                            '25112'
+                        WHEN sirdpcl_dept_code = 'BULE' THEN
+                            '25113'
+                        WHEN sirdpcl_dept_code = 'ACCT' THEN
+                            '25222'
+                        WHEN sirdpcl_dept_code = 'ATTR' THEN
+                            '25376'
+                        WHEN sirdpcl_dept_code = 'ATRN' THEN
+                            '25376'
+                        WHEN sirdpcl_dept_code = 'BT'   THEN
+                            '31150'
+                        WHEN sirdpcl_dept_code = 'CF'   THEN
+                            '31240'
+                        WHEN sirdpcl_dept_code = 'CM'   THEN
+                            '31220'
+                        WHEN sirdpcl_dept_code = 'CP'   THEN
+                            '31170'
+                        WHEN sirdpcl_dept_code = 'CT'   THEN
+                            '31190'
+                        WHEN sirdpcl_dept_code = 'DC'   THEN
+                            '31170'
+                        WHEN sirdpcl_dept_code = 'GC'   THEN
+                            '31210'
+                        WHEN sirdpcl_dept_code = 'GS'   THEN
+                            '31170'
+                        WHEN sirdpcl_dept_code = 'HS'   THEN
+                            '31160'
+                        WHEN sirdpcl_dept_code = 'MF'   THEN
+                            '32230'
+                        WHEN sirdpcl_dept_code = 'ML'   THEN
+                            '31200'
+                        WHEN sirdpcl_dept_code = 'NT'   THEN
+                            '31150'
+                        WHEN sirdpcl_dept_code = 'OT'   THEN
+                            '31150'
+                        WHEN sirdpcl_dept_code = 'PC'   THEN
+                            '31180'
+                        WHEN sirdpcl_dept_code = 'PH'   THEN
+                            '31160'
+                        WHEN sirdpcl_dept_code = 'SP'   THEN
+                            '31180'
+                        WHEN sirdpcl_dept_code = 'TL'   THEN
+                            '31200'
+                        WHEN sirdpcl_dept_code = 'TS'   THEN
+                            '31160'
+                    END
+                   AND trunc(ftvorgn_nchg_date) = trunc(TO_DATE('31-DEC-99', 'DD-MON-YY'))
+            WHERE
+                /* Exclude CAS */
+                substr(sirasgn_term_code, 6, 1) IN (
+                    2
+                    , 3
+                )
+                AND sirasgn_term_code >= '200772'
+                AND sirasgn_term_code <= fz_get_current_term(SYSDATE, substr(sirasgn_term_code, 6, 1)
+                )
+    --------------------------------------
+    --------------------------------------
+            UNION ALL
+    --------------------------------------
+    --------------------------------------
+            /* Aggregates sum of credit hours and enrollment count for each Seminary course */
+            SELECT
+                /* Include summer term in next fiscal year */
+                CASE
+                    WHEN substr(dataset.sfrstcr_term_code, 5, 1) = '7' THEN
+                        to_number(substr(dataset.sfrstcr_term_code, 1, 4)) + 1
+                    ELSE
+                        to_number(substr(dataset.sfrstcr_term_code, 1, 4))
+                END fy
+                , dataset.tbracct_b_orgn_code || ' - ' || dataset.ftvorgn_title orgn
+                , dataset.sfrstcr_crn
+                , SUM(dataset.credit_hours) credit_hours
+                , dataset.teu --null
+                , COUNT(dataset.sfrstcr_pidm) enroll_count
+            FROM
+                (
+                    /* Dataset used for Seminary sum of credit hours and enrollment count */
+                    SELECT
+                        sfrstcr_term_code
+                        , sfrstcr_pidm
+                        , sfrstcr_crn
+                        , CASE
+                            WHEN sirdpcl_dept_code = 'BT' THEN
+                                '31150'
+                            WHEN sirdpcl_dept_code = 'CF' THEN
+                                '31240'
+                            WHEN sirdpcl_dept_code = 'CM' THEN
+                                '31220'
+                            WHEN sirdpcl_dept_code = 'CP' THEN
+                                '31170'
+                            WHEN sirdpcl_dept_code = 'CT' THEN
+                                '31190'
+                            WHEN sirdpcl_dept_code = 'DC' THEN
+                                '31170'
+                            WHEN sirdpcl_dept_code = 'GC' THEN
+                                '31210'
+                            WHEN sirdpcl_dept_code = 'GS' THEN
+                                '31170'
+                            WHEN sirdpcl_dept_code = 'HS' THEN
+                                '31160'
+                            WHEN sirdpcl_dept_code = 'MF' THEN
+                                '32230'
+                            WHEN sirdpcl_dept_code = 'ML' THEN
+                                '31200'
+                            WHEN sirdpcl_dept_code = 'NT' THEN
+                                '31150'
+                            WHEN sirdpcl_dept_code = 'OT' THEN
+                                '31150'
+                            WHEN sirdpcl_dept_code = 'PC' THEN
+                                '31180'
+                            WHEN sirdpcl_dept_code = 'PH' THEN
+                                '31160'
+                            WHEN sirdpcl_dept_code = 'SP' THEN
+                                '31180'
+                            WHEN sirdpcl_dept_code = 'TL' THEN
+                                '31200'
+                            WHEN sirdpcl_dept_code = 'TS' THEN
+                                '31160'
+                        END tbracct_b_orgn_code
+                        , ftvorgn_title
+                        , CASE
+                            WHEN nvl(ssbsect.ssbsect_enrl, 0) = 0 THEN
+                                NULL
+                            ELSE
+                                ssbsect.ssbsect_tot_credit_hrs / ssbsect.ssbsect_enrl
+                        END credit_hours
+                        , NULL teu
+                    FROM
+                        sfrstcr
+                        JOIN stvterm
+                        ON stvterm_code = sfrstcr_term_code
+                        JOIN ssbsect
+                        ON ssbsect.ssbsect_term_code = sfrstcr_term_code
+                           AND ssbsect.ssbsect_crn = sfrstcr_crn
+                           AND ssbsect.ssbsect_ssts_code = 'A'
+                        /* Only include registered, exclude audits */
+                        JOIN stvrsts
+                        ON stvrsts_code = sfrstcr_rsts_code
+                           AND stvrsts_voice_type IN (
+                            'R'
+                        )
+                           AND stvrsts_code <> 'AU'
+                        JOIN sirasgn
+                        ON sirasgn_crn = sfrstcr_crn
+                           AND sirasgn_term_code = sfrstcr_term_code
+                           AND substr(sirasgn_term_code, 6, 1) = '3'
+                           AND sirasgn_term_code >= '200772'
+                           AND sirasgn_term_code <= fz_get_current_term(SYSDATE, substr(sirasgn_term_code
+                           , 6, 1))
+                        JOIN sirdpcl
+                        ON sirdpcl_pidm = sirasgn_pidm
+                           AND sirdpcl_home_ind = 'Y'
+                           AND sirdpcl_term_code_eff = (
+                            SELECT
+                                MAX(dpcl2.sirdpcl_term_code_eff)
+                            FROM
+                                sirdpcl dpcl2
+                            WHERE
+                                dpcl2.sirdpcl_pidm = sirdpcl.sirdpcl_pidm
+                                AND dpcl2.sirdpcl_term_code_eff <= sirasgn_term_code
+                                AND dpcl2.sirdpcl_home_ind = 'Y'
+                        )
+                        JOIN ftvorgn
+                        ON ftvorgn_orgn_code =
+                            /* ORGN of course determined by department */
+                            CASE
+                                WHEN sirdpcl_dept_code = 'BT' THEN
+                                    '31150'
+                                WHEN sirdpcl_dept_code = 'CF' THEN
+                                    '31240'
+                                WHEN sirdpcl_dept_code = 'CM' THEN
+                                    '31220'
+                                WHEN sirdpcl_dept_code = 'CP' THEN
+                                    '31170'
+                                WHEN sirdpcl_dept_code = 'CT' THEN
+                                    '31190'
+                                WHEN sirdpcl_dept_code = 'DC' THEN
+                                    '31170'
+                                WHEN sirdpcl_dept_code = 'GC' THEN
+                                    '31210'
+                                WHEN sirdpcl_dept_code = 'GS' THEN
+                                    '31170'
+                                WHEN sirdpcl_dept_code = 'HS' THEN
+                                    '31160'
+                                WHEN sirdpcl_dept_code = 'MF' THEN
+                                    '32230'
+                                WHEN sirdpcl_dept_code = 'ML' THEN
+                                    '31200'
+                                WHEN sirdpcl_dept_code = 'NT' THEN
+                                    '31150'
+                                WHEN sirdpcl_dept_code = 'OT' THEN
+                                    '31150'
+                                WHEN sirdpcl_dept_code = 'PC' THEN
+                                    '31180'
+                                WHEN sirdpcl_dept_code = 'PH' THEN
+                                    '31160'
+                                WHEN sirdpcl_dept_code = 'SP' THEN
+                                    '31180'
+                                WHEN sirdpcl_dept_code = 'TL' THEN
+                                    '31200'
+                                WHEN sirdpcl_dept_code = 'TS' THEN
+                                    '31160'
+                            END
+                           AND trunc(ftvorgn_nchg_date) = trunc(TO_DATE('31-DEC-99', 'DD-MON-YY'))
+                ) dataset
+            GROUP BY
+                    CASE
+                        WHEN substr(dataset.sfrstcr_term_code, 5, 1) = '7' THEN
+                            to_number(substr(dataset.sfrstcr_term_code, 1, 4)) + 1
+                        ELSE
+                            to_number(substr(dataset.sfrstcr_term_code, 1, 4))
+                    END
+                    , dataset.tbracct_b_orgn_code || ' - ' || dataset.ftvorgn_title
+                    , dataset.sfrstcr_crn
+                    , dataset.teu
+        ) dataset2
+    GROUP BY
+        fy
+        , orgn
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+    UNION ALL
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+    /* Aggregates CAPS/GS total revenue, total expenses, and net total */
+    SELECT
+        ds.fy     fy
+        , ds.orgn   orgn
+        , NULL avg_enroll
+        , NULL cred_hrs_sold
+        , NULL teus
+        , nvl(SUM(ds.rev), 0) gross_rev
+        , 0 - nvl(SUM(ds.exp), 0) expenses
+        , nvl(SUM(ds.rev), 0) - nvl(SUM(ds.exp), 0) net_contrib
+    FROM
+        (
+            /* Dataset used for calculating CAPS/GS revenue */
+            SELECT
+                tbracct.tbracct_b_orgn_code || ' - ' || ftvorgn.ftvorgn_title orgn
+                , lpad(to_number(fgbopal.fgbopal_fsyr_code - 1), 2, '0') || '-' || fgbopal.fgbopal_fsyr_code
+                fy
+                , fgbopal.fgbopal_12_ytd_actv rev
+                , NULL exp
+            FROM
+                tbracct
+                JOIN ftvorgn
+                ON ftvorgn.ftvorgn_orgn_code = tbracct.tbracct_b_orgn_code
+                   AND ftvorgn.ftvorgn_orgn_code NOT IN (
+                    '00000' --University
+                    , '25105' --Administration
+                )
+                JOIN fgbopal
+                ON fgbopal.fgbopal_orgn_code = ftvorgn.ftvorgn_orgn_code
+                   AND fgbopal.fgbopal_coas_code = ftvorgn.ftvorgn_coas_code
+                   AND fgbopal_acct_code IN (
+                    5101 --Tuition
+                    , 5108 --Fees
+                    , 5120 --Books
+                )
+                   AND fgbopal.fgbopal_coas_code = '1'
+                   AND fgbopal.fgbopal_fsyr_code >= '07'
+            WHERE
+                (tbracct.tbracct_detail_code LIKE 'U%'
+                    or tbracct.tbracct_detail_code LIKE 'V%')
+                AND tbracct.tbracct_detc_eff_date = (
+                    SELECT
+                        MAX(b.tbracct_detc_eff_date)
+                    FROM
+                        tbracct b
+                    WHERE
+                        b.tbracct_detail_code = tbracct.tbracct_detail_code
+                )
+    -----------------------------------
+    -----------------------------------
+            UNION
+    -----------------------------------
+    -----------------------------------
+            /* Dataset used for calculating CAPS/GS expenses */
+            SELECT
+                tbracct.tbracct_b_orgn_code || ' - ' || ftvorgn.ftvorgn_title orgn
+                , lpad(to_number(fgbopal.fgbopal_fsyr_code - 1), 2, '0') || '-' || fgbopal.fgbopal_fsyr_code
+                fy
+                , NULL rev
+                , fgbopal.fgbopal_12_ytd_actv exp
+            FROM
+                tbracct
+                JOIN ftvorgn
+                ON ftvorgn.ftvorgn_orgn_code = tbracct.tbracct_b_orgn_code
+                   AND ftvorgn.ftvorgn_orgn_code NOT IN (
+                    '00000' --University
+                    , '25105' --Administration
+                )
+                JOIN fgbopal
+                ON fgbopal.fgbopal_orgn_code = ftvorgn.ftvorgn_orgn_code
+                   AND fgbopal.fgbopal_coas_code = ftvorgn.ftvorgn_coas_code
+                   AND ( fgbopal.fgbopal_acct_code IN (
+                    6021 --Full-Time Faculty Salaries
+                    , 6022 -- Part-Time Faculty Salaries
+                    , 6023 --Faculty Overload
+                    , 6024 --Faculty Chair Salaries
+                    , 6201 --Benefits
+                    , 6001 --Staff and Admin Salaries
+                    , 6011 --Project and Temp Salaries
+                    , 6028 --Faculty Stipends
+                    , 6029 --Other Faculty Salaries
+                    , 6050 --Honorarium
+                    , 6025 --Sabbatical Leave Salaries
+                )
+                /* Events, Services, Grants, Travel, Misc Fees/Expenses */
+                         OR ( fgbopal.fgbopal_acct_code >= '7001'
+                              AND fgbopal.fgbopal_acct_code <= '7799' )
+                /* Equipment, Projects, Construction */
+                         OR fgbopal.fgbopal_acct_code LIKE '78%' )
+                   AND fgbopal.fgbopal_coas_code = '1'
+                   AND fgbopal.fgbopal_fsyr_code >= '07'
+            WHERE
+                (tbracct.tbracct_detail_code LIKE 'U%'
+                 or tbracct.tbracct_detail_code LIKE 'V%')
+                AND tbracct.tbracct_detc_eff_date = (
+                    SELECT
+                        MAX(b.tbracct_detc_eff_date)
+                    FROM
+                        tbracct b
+                    WHERE
+                        b.tbracct_detail_code = tbracct.tbracct_detail_code
+                )
+        ) ds
+    GROUP BY
+        ds.orgn
+        , ds.fy
+    ORDER BY
+        fy
+        , orgn;
