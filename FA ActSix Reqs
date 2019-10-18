@@ -1,0 +1,264 @@
+SPOOL &1
+
+SET SERVEROUTPUT ON
+
+DECLARE
+    v_count SIMPLE_INTEGER := 0;
+    CURSOR rrrareq_data IS
+    SELECT DISTINCT
+        cont.pidm__c                pidm
+        , appl.actsix_picklist__c   status
+        , ra.rrrareq_treq_code      a_treq
+        , ra.rrrareq_trst_code      a_trst
+        , ra.rrrareq_fund_code      a_fund
+        , ra.rrrareq_sys_ind        a_sys
+        , ra.rrrareq_sbgi_code      a_sbgi
+        , rf.rrrareq_treq_code      f_treq
+        , rf.rrrareq_trst_code      f_trst
+        , rf.rrrareq_fund_code      f_fund
+        , rf.rrrareq_sys_ind        f_sys
+        , rf.rrrareq_sbgi_code      f_sbgi
+        , rs.rrrareq_treq_code      s_treq
+        , rs.rrrareq_trst_code      s_trst
+        , rs.rrrareq_fund_code      s_fund
+        , rs.rrrareq_sys_ind        s_sys
+        , rs.rrrareq_sbgi_code      s_sbgi
+        , rr.rrrareq_treq_code      revise
+    FROM
+        jbmgr.contact                               cont
+        JOIN jbmgr.enrollmentrxrx__enrollment_153   appl
+        ON appl.enrollmentrxrx__applicant__c = cont.id
+           AND appl.actsix_picklist__c IS NOT NULL
+           AND appl.term_code__c LIKE '%1'
+           AND appl.admissions_status__c IN (
+            'Applied'
+            , 'Accepted','Confirmed','Enrolled'
+            )
+           AND substr(&aidy_code, 3, 2) = substr(appl.term_code__c, 3, 2)
+        LEFT JOIN rrrareq                                ra
+        ON ra.rrrareq_pidm = cont.pidm__c
+           AND ra.rrrareq_aidy_code = &aidy_code
+           AND ra.rrrareq_treq_code = 'ACTSXA'
+        LEFT JOIN rrrareq                                rf
+        ON rf.rrrareq_pidm = cont.pidm__c
+           AND rf.rrrareq_aidy_code = &aidy_code
+           AND rf.rrrareq_treq_code = 'ACTSXF'
+        LEFT JOIN rrrareq                                rs
+        ON rs.rrrareq_pidm = cont.pidm__c
+           AND rs.rrrareq_aidy_code = &aidy_code
+           AND rs.rrrareq_treq_code = 'ACTSXS'
+        LEFT JOIN rrrareq                                rr
+        ON rr.rrrareq_pidm        = cont.pidm__c
+           AND rr.rrrareq_aidy_code = &aidy_code
+           AND rr.rrrareq_treq_code = 'REVISE'
+    where
+        cont.pidm__c IS NOT NULL;
+
+BEGIN
+  FOR rec IN rrrareq_data LOOP
+        v_count := v_count + 1;
+        IF rec.status = 'Applicant' AND rec.a_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXA'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'E'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm||', aidy '
+                                    || &aidy_code || ', treq ACTSXA, trst E');
+
+        END IF;
+
+        IF rec.status = 'Former Applicant' AND rec.a_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXA'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'N'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count ||'. Created Pidm '|| rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXA, trst N');
+
+        ELSIF rec.status = 'Former Applicant' AND nvl(rec.a_trst, 'X') <> 'N' THEN
+            rp_requirement.p_update(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXA'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'N'
+                                    , p_fund_code => rec.a_fund
+                                    , p_sys_ind => rec.a_sys
+                                    , p_sbgi_code => rec.a_sbgi);
+
+            dbms_output.put_line(v_count || '. Updated Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXA, trst N');
+
+        END IF;
+
+        IF rec.status = 'Finalist' AND rec.a_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXA'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'C'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXA, trst C');
+
+        ELSIF rec.status = 'Finalist' AND nvl(rec.a_trst, 'X') <> 'C' THEN
+            rp_requirement.p_update( p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXA'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'C'
+                                    , p_fund_code => rec.a_fund
+                                    , p_sys_ind => rec.a_sys
+                                    , p_sbgi_code => rec.a_sbgi);
+
+            dbms_output.put_line(v_count || '. Updated Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXA, trst C');
+
+        END IF;
+
+        IF rec.status = 'Finalist' AND rec.f_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXF'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'E'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXF, trst E');
+
+        END IF;
+
+        IF rec.status = 'Former Finalist' AND rec.f_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXF'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'N'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count||'. Created Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXF, trst N');
+
+        ELSIF rec.status = 'Former Finalist' AND nvl(rec.f_trst, 'X') <> 'N' THEN
+            rp_requirement.p_update(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXF'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'N'
+                                    , p_fund_code => rec.f_fund
+                                    , p_sys_ind => rec.f_sys
+                                    , p_sbgi_code => rec.f_sbgi);
+
+            dbms_output.put_line(v_count || '. Updated Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXF, trst N');
+
+        END IF;
+
+        IF rec.status = 'Scholar' AND rec.f_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXF'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'C'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXF, trst C');
+
+        ELSIF rec.status = 'Scholar' AND nvl(rec.f_trst, 'X') <> 'C' THEN
+            rp_requirement.p_update(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXF'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'C'
+                                    , p_fund_code => rec.f_fund
+                                    , p_sys_ind => rec.f_sys
+                                    , p_sbgi_code => rec.f_sbgi);
+
+            dbms_output.put_line(v_count || '. Updated Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXF, trst C');
+
+        END IF;
+
+        IF rec.status = 'Scholar' AND rec.s_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXS'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'P'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm ||', aidy '
+                                    || &aidy_code || ', treq ACTSXS, trst P');
+
+        END IF;
+
+        IF rec.status = 'Former Scholar' AND rec.s_treq IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXS'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'N'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'B'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXS, trst N');
+
+        ELSIF rec.status = 'Former Scholar' AND nvl(rec.s_trst, 'X') <> 'N' THEN
+            rp_requirement.p_update(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'ACTSXS'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'N'
+                                    , p_fund_code => rec.s_fund
+                                    , p_sys_ind => rec.s_sys
+                                    , p_sbgi_code => rec.s_sbgi);
+
+            dbms_output.put_line(v_count || '. Updated Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq ACTSXS, trst N');
+
+        END IF;
+
+        IF rec.status = 'Former Scholar' AND rec.revise IS NULL THEN
+            rp_requirement.p_create(p_aidy_code => &aidy_code
+                                    , p_pidm => rec.pidm
+                                    , p_treq_code => 'REVISE'
+                                    , p_stat_date => SYSDATE
+                                    , p_trst_code => 'P'
+                                    , p_fund_code => NULL
+                                    , p_sys_ind => 'M'
+                                    , p_sbgi_code => NULL);
+
+            dbms_output.put_line(v_count || '. Created Pidm ' || rec.pidm || ', aidy '
+                                    || &aidy_code || ', treq REVISE, trst P');
+
+        END IF;
+
+    END LOOP;
+
+    COMMIT;
+END;
+/
