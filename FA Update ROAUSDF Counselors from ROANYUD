@@ -1,0 +1,107 @@
+SPOOL &1
+
+--update robusdf value 36 when null or mistmatched from robnyud
+
+UPDATE robusdf
+SET
+    robusdf_value_36 = (
+        SELECT
+            CASE
+                WHEN robnyud_value_20 IS NOT NULL THEN
+                    robnyud_value_20
+                ELSE
+                    robnyud_value_19
+            END
+        FROM
+            robnyud
+        WHERE
+            robusdf_pidm = robnyud_pidm
+    )
+, robusdf_value_37 = 'Counselor'
+, robusdf_user_id = 'BANWORX'
+, robusdf_activity_date = SYSDATE
+WHERE
+    robusdf_aidy_code = &aidy_code
+    AND ( robusdf_value_36 IS NULL
+          OR ( (
+        SELECT
+            robnyud_value_20
+        FROM
+            robnyud
+        WHERE
+            robnyud_pidm = robusdf_pidm
+    ) <> robusdf_value_36 )
+          OR ( (
+        SELECT
+            robnyud_value_19
+        FROM
+            robnyud
+        WHERE
+            robnyud_pidm = robusdf_pidm
+            AND robnyud_value_20 IS NULL
+    ) <> robusdf_value_36) )
+    AND EXISTS (
+        SELECT
+            'x'
+        FROM
+            rorstat
+        WHERE
+            rorstat_pidm = robusdf_pidm
+            AND rorstat_aidy_code = robusdf_aidy_code
+            AND nvl(rorstat_tgrp_code,'DEFALT') <> 'DEFALT'
+    );
+
+COMMIT;           
+
+--update robusdf value 38 when null or mistmatched from robnyud
+
+UPDATE robusdf
+SET
+    robusdf_value_38 = (
+        SELECT
+            CASE
+                WHEN robnyud_value_40 IS NOT NULL THEN
+                    robnyud_value_40
+                ELSE
+                    robnyud_value_39
+            END
+        FROM
+            robnyud
+        WHERE
+            robusdf_pidm = robnyud_pidm
+    )
+, robusdf_user_id = 'BANWORX'
+, robusdf_activity_date = SYSDATE
+WHERE
+    robusdf_aidy_code = &aidy_code
+    AND ( robusdf_value_38 IS NULL
+          OR ( (
+        SELECT
+            robnyud_value_40
+        FROM
+            robnyud
+        WHERE
+            robnyud_pidm = robusdf_pidm
+    ) <> robusdf_value_38 )
+          OR ( (
+        SELECT
+            robnyud_value_39
+        FROM
+            robnyud
+        WHERE
+            robnyud_pidm = robusdf_pidm
+            AND robnyud_value_40 IS NULL
+    ) <> robusdf_value_38 ) )
+    AND EXISTS (
+        SELECT
+            'x'
+        FROM
+            rorstat
+        WHERE
+            rorstat_pidm = robusdf_pidm
+            AND rorstat_aidy_code = robusdf_aidy_code
+            AND nvl(rorstat_tgrp_code, 'DEFALT') <> 'DEFALT'
+    );
+
+COMMIT;
+/
