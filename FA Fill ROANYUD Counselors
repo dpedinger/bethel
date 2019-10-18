@@ -1,0 +1,322 @@
+SPOOL &1
+
+SET SERVEROUTPUT ON
+
+<< block_all >> DECLARE
+    v_count SIMPLE_INTEGER := 0;
+    CURSOR counselor_data IS
+    SELECT
+        group1.spriden_pidm
+        , counselor.cas       counselor
+        , counselor.cas_sec   counselor_sec
+        , 'Counselor' title
+        , (
+            SELECT
+                verif_counselor
+            FROM
+                bthbanr.fa_counselor_ver
+            WHERE
+                counselor.cas = fa_counselor
+        ) AS verif_counselor
+        , (
+            SELECT
+                verif_sec
+            FROM
+                bthbanr.fa_counselor_ver
+            WHERE
+                counselor.cas = fa_counselor
+        ) AS verif_sec
+    FROM
+        bthbanr.fa_counselors2   counselor
+        , spriden                  spr2
+        , (
+            SELECT
+                spr.spriden_pidm
+                , rorstat_tgrp_code
+                , spr.spriden_last_name
+                , spr.spriden_first_name
+                , robnyud_value_19   counselor
+                , robnyud_value_20   counselor_sec
+                , spraddr_stat_code
+                , spraddr_zip
+                , spraddr_natn_code
+                , spraddr_stat_code || substr(spraddr_zip, 1, 3) AS "MN3"
+                , spraddr_stat_code || substr(spraddr_zip, 1,4) AS "MN4"
+                , CASE
+                    WHEN spraddr_stat_code IS NULL THEN
+                        'NON'
+                    WHEN spraddr_natn_code = 'EAU' THEN
+                        'UG'
+                    WHEN spraddr_natn_code NOT IN (
+                        'USA'
+                        , 'CDN'
+                    ) THEN
+                        'FC'
+                    WHEN spraddr_stat_code IN (
+                        'CM'
+                        , 'AS'
+                        , 'MP'
+                    ) THEN
+                        'NON'
+                    WHEN spraddr_stat_code || substr(spraddr_zip, 1, 3) IN (
+                        'MN556', 'MN557', 'MN558', 'MN559', 'MN560', 'MN561', 'MN562', 'MN563',
+                        'MN564', 'MN565', 'MN566', 'MN567', 'CA900', 'CA901', 'CA902', 'CA903',
+                        'CA904', 'CA905', 'CA906', 'CA907', 'CA908', 'CA909', 'CA910', 'CA911',
+                        'CA912', 'CA913', 'CA914', 'CA915', 'CA916', 'CA917', 'CA918', 'CA919',
+                        'CA920', 'CA921', 'CA922', 'CA923', 'CA924', 'CA925', 'CA926', 'CA927',
+                        'CA928', 'CA929', 'CA930', 'CA931', 'CA932', 'CA933', 'CA934', 'CA935',
+                        'CA936', 'CA937', 'CA938', 'CA939', 'CA940', 'CA941', 'CA942', 'CA943',
+                        'CA944', 'CA945', 'CA946', 'CA947', 'CA948', 'CA949', 'CA950', 'CA951',
+                        'CA952', 'CA953', 'CA954', 'CA955', 'CA956', 'CA957', 'CA958', 'CA959',
+                        'CA960', 'CA961'
+                    ) THEN
+                        spraddr_stat_code || substr(spraddr_zip, 1, 3)
+                    WHEN spraddr_stat_code = ( 'MN' )
+                         AND spraddr_stat_code || substr(spraddr_zip, 1, 3) NOT IN (
+                        'MN556', 'MN557', 'MN558', 'MN559', 'MN560', 'MN561', 'MN562', 'MN563',
+                        'MN564', 'MN565', 'MN566', 'MN567', 'CA900', 'CA901', 'CA902', 'CA903',
+                        'CA904', 'CA905', 'CA906', 'CA907', 'CA908', 'CA909', 'CA910', 'CA911',
+                        'CA912', 'CA913', 'CA914', 'CA915', 'CA916', 'CA917', 'CA918', 'CA919',
+                        'CA920', 'CA921', 'CA922', 'CA923', 'CA924', 'CA925', 'CA926', 'CA927',
+                        'CA928', 'CA929', 'CA930', 'CA931', 'CA932', 'CA933', 'CA934', 'CA935',
+                        'CA936', 'CA937', 'CA938', 'CA939', 'CA940', 'CA941', 'CA942', 'CA943',
+                        'CA944', 'CA945', 'CA946', 'CA947', 'CA948', 'CA949', 'CA950', 'CA951',
+                        'CA952', 'CA953', 'CA954', 'CA955', 'CA956', 'CA957', 'CA958', 'CA959',
+                        'CA960', 'CA961'
+                    ) THEN
+                        spraddr_stat_code || substr(spraddr_zip, 1, 4)
+                    ELSE
+                        spraddr_stat_code
+                END area
+            FROM
+                robnyud
+                JOIN spriden spr
+                ON spr.spriden_pidm = robnyud_pidm
+                   AND spr.spriden_change_ind IS NULL
+                LEFT JOIN spraddr
+                ON spr.spriden_pidm = spraddr_pidm
+                   AND spraddr_atyp_code = 'MA'
+                   AND spraddr_status_ind IS NULL
+                JOIN rorstat
+                ON rorstat_aidy_code = '&aidy_code'
+                   AND rorstat_tgrp_code LIKE ( 'CAS%' )
+                   AND rorstat_pidm = spr.spriden_pidm
+            WHERE
+                robnyud_value_19 IS NULL
+        ) group1
+    WHERE
+        spr2.spriden_pidm = group1.spriden_pidm
+        AND spr2.spriden_change_ind IS NULL
+        AND group1.area = counselor.category
+        AND counselor.aidy = 'NYUD'
+    UNION
+    SELECT
+        facounselor.spriden_pidm
+        , facounselor.facounselor       counselor
+        , facounselor.facounselor_sec   counselor_sec
+        , 'Counselor' title
+        , verif.verif_counselor         verif_counselor
+        , verif.verif_sec               verif_sec
+    FROM
+        bthbanr.fa_counselor_ver verif
+        , (
+            SELECT
+                group1.spriden_pidm
+                , CASE
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'CAPS'
+                        , 'CPSSCH'
+                        , 'CPSMSC'
+                        , 'CPSAPP'
+                    ) THEN
+                        counselor.caps
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'GS'
+                        , 'GSSCH'
+                        , 'GSMSC'
+                        , 'GSAPP'
+                    ) THEN
+                        counselor.gs
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'DP'
+                        , 'DPSCH'
+                        , 'DPMSC'
+                        , 'DPAPP'
+                    ) THEN
+                        counselor.doc
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'SEM'
+                        , 'SEMSCH'
+                        , 'SEMMSC'
+                        , 'SEMAPP'
+                    ) THEN
+                        counselor.sem
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'DMIN'
+                        , 'DMNSCH'
+                        , 'DMNMSC'
+                        , 'DMNAPP'
+                    ) THEN
+                        counselor.dmin
+                    ELSE
+                        ''
+                END facounselor
+                , CASE
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'CAPS'
+                        , 'CPSSCH'
+                        , 'CPSMSC'
+                        , 'CPSAPP'
+                    ) THEN
+                        counselor.caps_sec
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'GS'
+                        , 'GSSCH'
+                        , 'GSMSC'
+                        , 'GSAPP'
+                    ) THEN
+                        counselor.gs_sec
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'DP'
+                        , 'DPSCH'
+                        , 'DPMSC'
+                        , 'DPAPP'
+                    ) THEN
+                        counselor.doc_sec
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'SEM'
+                        , 'SEMSCH'
+                        , 'SEMMSC'
+                        , 'SEMAPP'
+                    ) THEN
+                        counselor.sem_sec
+                    WHEN group1.rorstat_tgrp_code IN (
+                        'DMIN'
+                        , 'DMNSCH'
+                        , 'DMNMSC'
+                        , 'DMNAPP'
+                    ) THEN
+                        counselor.dmin_sec
+                    ELSE
+                        ''
+                END facounselor_sec
+            FROM
+                bthbanr.fa_counselors2   counselor
+                , spriden                  spr2
+                , (
+                    SELECT
+                        spr.spriden_pidm
+                        , rorstat_tgrp_code
+                        , spr.spriden_last_name
+                        , spr.spriden_first_name
+                        , robnyud_value_19   counselor
+                        , robnyud_value_20   counselor_sec
+                        , spraddr_stat_code
+                        , spraddr_zip
+                        , spraddr_natn_code
+                        , spraddr_stat_code || substr(spraddr_zip, 1, 3) AS "MN3"
+                        , spraddr_stat_code || substr(spraddr_zip, 1, 4) AS "MN4"
+                        , CASE
+                            WHEN spraddr_stat_code IS NULL THEN
+                                'NON'
+                            WHEN spraddr_natn_code = 'EAU' THEN
+                                'UG'
+                            WHEN spraddr_natn_code NOT IN (
+                                'USA'
+                                , 'CDN'
+                            ) THEN
+                                'FC'
+                            WHEN spraddr_stat_code IN (
+                                'CM'
+                                , 'AS'
+                                , 'MP'
+                            ) THEN
+                                'NON'
+                            WHEN spraddr_stat_code || substr(spraddr_zip, 1, 3) IN (
+                        'MN556', 'MN557', 'MN558', 'MN559', 'MN560', 'MN561', 'MN562', 'MN563',
+                        'MN564', 'MN565', 'MN566', 'MN567', 'CA900', 'CA901', 'CA902', 'CA903',
+                        'CA904', 'CA905', 'CA906', 'CA907', 'CA908', 'CA909', 'CA910', 'CA911',
+                        'CA912', 'CA913', 'CA914', 'CA915', 'CA916', 'CA917', 'CA918', 'CA919',
+                        'CA920', 'CA921', 'CA922', 'CA923', 'CA924', 'CA925', 'CA926', 'CA927',
+                        'CA928', 'CA929', 'CA930', 'CA931', 'CA932', 'CA933', 'CA934', 'CA935',
+                        'CA936', 'CA937', 'CA938', 'CA939', 'CA940', 'CA941', 'CA942', 'CA943',
+                        'CA944', 'CA945', 'CA946', 'CA947', 'CA948', 'CA949', 'CA950', 'CA951',
+                        'CA952', 'CA953', 'CA954', 'CA955', 'CA956', 'CA957', 'CA958', 'CA959',
+                        'CA960', 'CA961'
+                            ) THEN
+                                spraddr_stat_code || substr(spraddr_zip, 1, 3)
+                            WHEN spraddr_stat_code = ( 'MN' )
+                                 AND spraddr_stat_code || substr(spraddr_zip, 1, 3) NOT IN (
+                        'MN556', 'MN557', 'MN558', 'MN559', 'MN560', 'MN561', 'MN562', 'MN563',
+                        'MN564', 'MN565', 'MN566', 'MN567', 'CA900', 'CA901', 'CA902', 'CA903',
+                        'CA904', 'CA905', 'CA906', 'CA907', 'CA908', 'CA909', 'CA910', 'CA911',
+                        'CA912', 'CA913', 'CA914', 'CA915', 'CA916', 'CA917', 'CA918', 'CA919',
+                        'CA920', 'CA921', 'CA922', 'CA923', 'CA924', 'CA925', 'CA926', 'CA927',
+                        'CA928', 'CA929', 'CA930', 'CA931', 'CA932', 'CA933', 'CA934', 'CA935',
+                        'CA936', 'CA937', 'CA938', 'CA939', 'CA940', 'CA941', 'CA942', 'CA943',
+                        'CA944', 'CA945', 'CA946', 'CA947', 'CA948', 'CA949', 'CA950', 'CA951',
+                        'CA952', 'CA953', 'CA954', 'CA955', 'CA956', 'CA957', 'CA958', 'CA959',
+                        'CA960', 'CA961'
+                            ) THEN
+                                spraddr_stat_code || substr(spraddr_zip, 1, 4)
+                            ELSE
+                                spraddr_stat_code
+                        END area
+                    FROM
+                        robnyud
+                        JOIN spriden spr
+                        ON spr.spriden_pidm = robnyud_pidm
+                           AND spr.spriden_change_ind IS NULL
+                        LEFT JOIN spraddr
+                        ON spr.spriden_pidm = spraddr_pidm
+                           AND spraddr_atyp_code = 'MA'
+                           AND spraddr_status_ind IS NULL
+                        JOIN rorstat
+                        ON rorstat_aidy_code = '&aidy_code'
+                           AND rorstat_tgrp_code NOT LIKE ( 'CAS%' )
+                           AND rorstat_pidm = spr.spriden_pidm
+                    WHERE
+                        robnyud_value_19 IS NULL
+                ) group1
+            WHERE
+                spr2.spriden_pidm = group1.spriden_pidm
+                AND spr2.spriden_change_ind IS NULL
+                AND group1.area = counselor.category
+                AND counselor.aidy = 'NYUD'
+        ) facounselor
+    WHERE
+        facounselor.facounselor = verif.fa_counselor
+    ORDER BY
+        2 DESC;
+
+BEGIN
+    FOR counselor_rec IN counselor_data LOOP
+        v_count := v_count + 1;
+        << block_roanyud >> BEGIN
+            UPDATE robnyud
+            SET
+            robnyud_user_id = 'BANWORX'
+            , robnyud_activity_date = SYSDATE
+            , robnyud_value_19 = counselor_rec.counselor
+            , robnyud_value_20 = counselor_rec.counselor_sec
+            , robnyud_value_39 = counselor_rec.verif_counselor
+            , robnyud_value_40 = counselor_rec.verif_sec
+            WHERE
+                robnyud_pidm = counselor_rec.spriden_pidm;
+
+        EXCEPTION
+            WHEN OTHERS THEN
+                dbms_output.put_line(v_count || '. Error updating ROANYUD for pidm ' || counselor_rec
+                .spriden_pidm || ' ' || chr(35) || chr(35) || ' ' || sqlcode || ' - ' || sqlerrm);
+        END block_roanyud;
+
+        COMMIT;
+    END LOOP;
+
+    dbms_output.put_line('Process Complete');
+EXCEPTION
+    WHEN OTHERS THEN
+        dbms_output.put_line(v_count || '. ERROR' || ' ' || chr(35) || chr(35) || ' ' || sqlcode || ' - '
+        || sqlerrm);
+END block_all;
+/
